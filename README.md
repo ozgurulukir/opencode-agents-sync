@@ -2,6 +2,8 @@
 
 OpenCode/MiMo Code plugin that updates AGENTS.md after session compaction.
 
+Tested with OpenCode v1.14.48 and MiMo Code v0.1.0.
+
 ## How it works
 
 When auto-compaction completes, the plugin:
