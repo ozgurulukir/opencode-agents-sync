@@ -69,8 +69,9 @@ To pass options, add to your config:
 | Option       | Type       | Default        | Description                                  |
 | ------------ | ---------- | -------------- | -------------------------------------------- |
 | `enabled`    | `boolean`  | `true`         | Enable/disable the plugin                    |
-| `sections`   | `string[]` | All 8 sections | Which sections to include in AGENTS.md       |
+| `sections`   | `string[]` | All 8 sections | Which sections to target                     |
 | `promptFile` | `string`   | `null`         | Absolute path to custom prompt template file |
+| `template`   | `string`   | `null`         | Raw compaction prompt replacement (advanced) |
 
 ### Custom Prompt Template
 
