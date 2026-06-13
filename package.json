@@ -1,0 +1,39 @@
+{
+  "name": "opencode-agents-sync",
+  "version": "0.1.0",
+  "description": "Plugin that updates AGENTS.md after session compaction",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "scripts": {
+    "test": "node --test 'test/*.test.js'"
+  },
+  "keywords": [
+    "opencode",
+    "mimocode",
+    "plugin",
+    "compaction",
+    "agents"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "@mimo-ai/plugin": "^0.1.0-preview.0",
+    "@opencode-ai/plugin": "^1.14.28"
+  },
+  "peerDependenciesMeta": {
+    "@opencode-ai/plugin": {
+      "optional": true
+    },
+    "@mimo-ai/plugin": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.17.4"
+  }
+}

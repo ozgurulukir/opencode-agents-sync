@@ -1,0 +1,280 @@
+import { describe, it, beforeEach, afterEach } from "node:test";
+import assert from "node:assert/strict";
+import { writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+
+const { default: plugin } = await import("../index.js");
+
+function makeMockClient() {
+  const calls = [];
+  return {
+    calls,
+    session: {
+      prompt: async (opts) => {
+        calls.push(opts);
+      },
+    },
+  };
+}
+
+function flushTimers(ms = 1000) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+describe("opencode-agents-sync", () => {
+  it("should export a server function", () => {
+    assert.equal(typeof plugin, "function");
+  });
+
+  describe("experimental.session.compacting", () => {
+    it("should not register compacting hook when no custom template", async () => {
+      const hooks = await plugin({ client: makeMockClient() });
+      assert.equal(hooks["experimental.session.compacting"], undefined);
+    });
+
+    it("should register compacting hook when template is provided", async () => {
+      const hooks = await plugin(
+        { client: makeMockClient() },
+        { template: "Custom prompt" },
+      );
+      assert.equal(typeof hooks["experimental.session.compacting"], "function");
+    });
+
+    it("should set output.prompt to custom template", async () => {
+      const hooks = await plugin(
+        { client: makeMockClient() },
+        { template: "Custom instruction text" },
+      );
+      const output = { context: ["ignored"], prompt: undefined };
+      await hooks["experimental.session.compacting"](
+        { sessionID: "test" },
+        output,
+      );
+      assert.equal(output.prompt, "Custom instruction text");
+    });
+
+    it("should skip when disabled and template provided", async () => {
+      const hooks = await plugin(
+        { client: makeMockClient() },
+        { template: "Custom", enabled: false },
+      );
+      const output = { context: ["original"], prompt: undefined };
+      await hooks["experimental.session.compacting"](
+        { sessionID: "test" },
+        output,
+      );
+      assert.equal(output.prompt, undefined);
+    });
+  });
+
+  describe("experimental.compaction.autocontinue", () => {
+    it("should register autocontinue hook", async () => {
+      const hooks = await plugin({ client: makeMockClient() });
+      assert.equal(
+        typeof hooks["experimental.compaction.autocontinue"],
+        "function",
+      );
+    });
+
+    it("should disable default autocontinue", async () => {
+      const hooks = await plugin({ client: makeMockClient() });
+      const output = { enabled: true };
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "test" },
+        output,
+      );
+      assert.equal(output.enabled, false);
+    });
+
+    it("should call client.session.prompt with update instructions", async () => {
+      const mockClient = makeMockClient();
+      const hooks = await plugin({
+        client: mockClient,
+        directory: "/home/user/project",
+      });
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "ses_abc123" },
+        { enabled: true },
+      );
+      await flushTimers();
+      assert.equal(mockClient.calls.length, 1);
+      assert.equal(mockClient.calls[0].path.id, "ses_abc123");
+      assert.equal(mockClient.calls[0].body.parts.length, 1);
+      assert.equal(mockClient.calls[0].body.parts[0].type, "text");
+      const text = mockClient.calls[0].body.parts[0].text;
+      assert.ok(text.includes("AGENTS.md"));
+      assert.ok(text.includes("Target sections"));
+      assert.ok(text.includes("/home/user/project/AGENTS.md"));
+      assert.ok(text.includes("~/.config/opencode/AGENTS.md"));
+      assert.ok(text.includes("Exclusions"));
+      assert.ok(text.includes("skill"));
+      assert.ok(text.includes("PROJECT-LEVEL"));
+    });
+
+    it("should include all default sections in update prompt", async () => {
+      const mockClient = makeMockClient();
+      const hooks = await plugin({ client: mockClient });
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "test" },
+        { enabled: true },
+      );
+      await flushTimers();
+      const text = mockClient.calls[0].body.parts[0].text;
+      for (const section of [
+        "About",
+        "Setup",
+        "Development",
+        "Testing",
+        "Technologies",
+        "Rules",
+        "Known Issues",
+        "Notes",
+      ]) {
+        assert.ok(text.includes(section), `Missing section: ${section}`);
+      }
+    });
+
+    it("should respect custom sections", async () => {
+      const mockClient = makeMockClient();
+      const hooks = await plugin(
+        { client: mockClient },
+        { sections: ["Custom Section"] },
+      );
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "test" },
+        { enabled: true },
+      );
+      await flushTimers();
+      const text = mockClient.calls[0].body.parts[0].text;
+      assert.ok(text.includes("Custom Section"));
+      assert.ok(!text.includes("- Setup"));
+    });
+
+    it("should not call client.session.prompt when disabled", async () => {
+      const mockClient = makeMockClient();
+      const hooks = await plugin({ client: mockClient }, { enabled: false });
+      const output = { enabled: true };
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "test" },
+        output,
+      );
+      assert.equal(mockClient.calls.length, 0);
+      assert.equal(output.enabled, true);
+    });
+
+    it("should only send prompt once per session (prevent cascade)", async () => {
+      const mockClient = makeMockClient();
+      const hooks = await plugin({ client: mockClient });
+      const output1 = { enabled: true };
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "ses_repeat" },
+        output1,
+      );
+      await flushTimers();
+      assert.equal(output1.enabled, false);
+      assert.equal(mockClient.calls.length, 1);
+
+      const output2 = { enabled: true };
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "ses_repeat" },
+        output2,
+      );
+      await flushTimers();
+      assert.equal(output2.enabled, true);
+      assert.equal(mockClient.calls.length, 1);
+    });
+
+    describe("custom prompt file", () => {
+      let tmpDir;
+
+      beforeEach(() => {
+        tmpDir = join(tmpdir(), `agents-sync-test-${Date.now()}`);
+        mkdirSync(tmpDir, { recursive: true });
+        mkdirSync(join(tmpDir, ".opencode"), { recursive: true });
+      });
+
+      afterEach(() => {
+        rmSync(tmpDir, { recursive: true, force: true });
+      });
+
+      it("should use project-level prompt file over built-in", async () => {
+        writeFileSync(
+          join(tmpDir, ".opencode", "agents-sync-prompt.md"),
+          "Custom project prompt for {{project_agents_md}}",
+        );
+        const mockClient = makeMockClient();
+        const hooks = await plugin({
+          client: mockClient,
+          directory: tmpDir,
+        });
+        await hooks["experimental.compaction.autocontinue"](
+          { sessionID: "test" },
+          { enabled: true },
+        );
+        await flushTimers();
+        const text = mockClient.calls[0].body.parts[0].text;
+        assert.equal(
+          text,
+          `Custom project prompt for ${join(tmpDir, "AGENTS.md")}`,
+        );
+      });
+
+      it("should substitute {{global_agents_md}} variable", async () => {
+        writeFileSync(
+          join(tmpDir, ".opencode", "agents-sync-prompt.md"),
+          "Check {{project_agents_md}} against {{global_agents_md}}",
+        );
+        const mockClient = makeMockClient();
+        const hooks = await plugin({
+          client: mockClient,
+          directory: tmpDir,
+        });
+        await hooks["experimental.compaction.autocontinue"](
+          { sessionID: "test" },
+          { enabled: true },
+        );
+        await flushTimers();
+        const text = mockClient.calls[0].body.parts[0].text;
+        assert.ok(text.includes(join(tmpDir, "AGENTS.md")));
+        assert.ok(text.includes("AGENTS.md"));
+        assert.ok(!text.includes("{{"));
+      });
+
+      it("should fall back to built-in when no prompt file exists", async () => {
+        const mockClient = makeMockClient();
+        const hooks = await plugin({
+          client: mockClient,
+          directory: tmpDir,
+        });
+        await hooks["experimental.compaction.autocontinue"](
+          { sessionID: "test" },
+          { enabled: true },
+        );
+        await flushTimers();
+        const text = mockClient.calls[0].body.parts[0].text;
+        assert.ok(text.includes("PROJECT-LEVEL"));
+      });
+
+      it("should use promptFile config option with absolute path", async () => {
+        const customFile = join(tmpDir, "my-custom-prompt.md");
+        writeFileSync(customFile, "Absolute path prompt");
+        const mockClient = makeMockClient();
+        const hooks = await plugin(
+          {
+            client: mockClient,
+            directory: tmpDir,
+          },
+          { promptFile: customFile },
+        );
+        await hooks["experimental.compaction.autocontinue"](
+          { sessionID: "test" },
+          { enabled: true },
+        );
+        await flushTimers();
+        const text = mockClient.calls[0].body.parts[0].text;
+        assert.equal(text, "Absolute path prompt");
+      });
+    });
+  });
+});
