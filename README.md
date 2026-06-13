@@ -56,23 +56,31 @@ cd ~/.config/mimocode && npm install @mimo-ai/plugin
 
 ## Configuration
 
-The plugin is auto-loaded from the plugins directory. No config entry is required.
+The plugin is auto-loaded from the plugins directory. No config entry is required unless you want to pass options.
 
-To pass options, add to your config:
+> **Note:** The plugin is discovered locally from the plugins directory. Do NOT add `"opencode-agents-sync"` as a plain string in the `plugin` array — OpenCode will try to resolve it from npm.
 
-```json
+To pass options, reference the local file path relative to the config directory:
+
+```jsonc
 {
   "plugin": [
     [
-      "opencode-agents-sync",
+      "./plugins/opencode-agents-sync.js",
       {
         "enabled": true,
-        "sections": ["About", "Setup", "Rules", "Known Issues"]
-      }
-    ]
-  ]
+        "sections": ["About", "Setup", "Rules", "Known Issues"],
+      },
+    ],
+  ],
 }
 ```
+
+]
+]
+}
+
+````
 
 ### Options
 
@@ -105,7 +113,7 @@ Example `agents-sync-prompt.md`:
 ```markdown
 Update {{project_agents_md}} with new discoveries from this session.
 Skip anything already in {{global_agents_md}}.
-```
+````
 
 ## Default Sections
 
