@@ -54,6 +54,7 @@ function parseOptions(raw) {
   if (!raw || typeof raw !== "object") {
     return {
       enabled: true,
+      continue: false,
       template: null,
       sections: DEFAULT_SECTIONS,
       promptFile: null,
@@ -61,6 +62,7 @@ function parseOptions(raw) {
   }
   return {
     enabled: raw.enabled !== false,
+    continue: raw.continue === true,
     template: raw.template || null,
     sections:
       Array.isArray(raw.sections) && raw.sections.length > 0
@@ -158,7 +160,9 @@ const plugin = async (input, rawOptions) => {
     }
 
     activeSessions.add(sessionID);
-    output.enabled = false;
+    if (!options.continue) {
+      output.enabled = false;
+    }
 
     const promptFile = resolvePromptFile(options, projectRoot);
     const filePrompt = loadPromptFile(promptFile, projectRoot);

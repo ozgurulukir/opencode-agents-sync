@@ -8,9 +8,25 @@ Tested with OpenCode v1.14.48 and MiMo Code v0.1.0.
 
 When auto-compaction completes, the plugin:
 
-1. Disables the default "Continue..." auto-continue message
-2. Sends a dedicated prompt through the normal agent loop (with full tool access)
-3. The LLM reads the current AGENTS.md, identifies new discoveries from the session, and edits the file
+1. Sends a dedicated prompt through the normal agent loop (with full tool access)
+2. The LLM reads the current AGENTS.md, identifies new discoveries from the session, and edits the file
+
+By default, the plugin replaces the default "Continue..." auto-continue message with the AGENTS.md update. If you want the agent to also continue its original task after the update, enable the `continue` option:
+
+```jsonc
+{
+  "plugin": [
+    [
+      "./plugins/opencode-agents-sync.js",
+      {
+        "continue": true,
+      },
+    ],
+  ],
+}
+```
+
+With `continue: true`, two turns run sequentially: first the AGENTS.md update, then the default "Continue..." resuming the original task. This uses more context but preserves workflow continuity.
 
 Only project-level AGENTS.md is updated. Global/user-level AGENTS.md (`~/.config/opencode/AGENTS.md`) is never touched. Skill definitions and non-project-specific information are excluded.
 
@@ -87,6 +103,7 @@ To pass options, reference the local file path relative to the config directory:
 | Option       | Type       | Default        | Description                                  |
 | ------------ | ---------- | -------------- | -------------------------------------------- |
 | `enabled`    | `boolean`  | `true`         | Enable/disable the plugin                    |
+| `continue`   | `boolean`  | `false`        | Also send default "Continue..." after update |
 | `sections`   | `string[]` | All 8 sections | Which sections to target                     |
 | `promptFile` | `string`   | `null`         | Absolute path to custom prompt template file |
 | `template`   | `string`   | `null`         | Raw compaction prompt replacement (advanced) |

@@ -470,6 +470,19 @@ describe("opencode-agents-sync", () => {
       assert.equal(output.enabled, true);
     });
 
+    it("should keep default continue enabled when continue option is true", async () => {
+      const mockClient = makeMockClient();
+      const hooks = await plugin({ client: mockClient }, { continue: true });
+      const output = { enabled: true };
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "test" },
+        output,
+      );
+      assert.equal(output.enabled, true);
+      await flushTimers();
+      assert.equal(mockClient.calls.length, 1);
+    });
+
     it("should only block during update, allow subsequent compaction (prevent cascade)", async () => {
       const mockClient = makeMockClient();
       const hooks = await plugin({ client: mockClient });
