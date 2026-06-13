@@ -109,22 +109,31 @@ function resolvePromptFile(options, projectRoot) {
   return null;
 }
 
-const LOG_DIR = join(process.env.HOME || "/tmp", ".local", "share", "mimocode");
-const LOG_FILE = join(LOG_DIR, "agents-sync-debug.log");
-
-function debugLog(msg) {
+function writeDebugLog(logDir, msg) {
   try {
-    mkdirSync(LOG_DIR, { recursive: true });
-    appendFileSync(LOG_FILE, `[${new Date().toISOString()}] ${msg}\n`);
+    mkdirSync(logDir, { recursive: true });
+    appendFileSync(
+      join(logDir, "agents-sync-debug.log"),
+      `[${new Date().toISOString()}] ${msg}\n`,
+    );
   } catch {}
+}
+
+function resolveLogDir(input) {
+  const home = process.env.HOME || "/tmp";
+  const host = input.serverUrl?.hostname || "";
+  if (host.includes("mimocode")) {
+    return join(home, ".local", "share", "mimocode");
+  }
+  return join(home, ".local", "share", "opencode");
 }
 
 const plugin = async (input, rawOptions) => {
   const options = parseOptions(rawOptions);
   const { client, directory: projectRoot } = input;
-  debugLog(
-    `Plugin loaded, enabled=${options.enabled}, projectRoot=${projectRoot}`,
-  );
+  const logDir = resolveLogDir(input);
+  const log = (msg) => writeDebugLog(logDir, msg);
+  log(`Plugin loaded, enabled=${options.enabled}, projectRoot=${projectRoot}`);
 
   const hooks = {};
   const activeSessions = new Set();
@@ -132,9 +141,7 @@ const plugin = async (input, rawOptions) => {
   if (options.template) {
     hooks["experimental.session.compacting"] = async (hookInput, output) => {
       if (!options.enabled) return;
-      debugLog(
-        `Using custom template as prompt (${options.template.length} chars)`,
-      );
+      log(`Using custom template as prompt (${options.template.length} chars)`);
       output.prompt = options.template;
     };
   }
@@ -142,12 +149,12 @@ const plugin = async (input, rawOptions) => {
   hooks["experimental.compaction.autocontinue"] = async (hookInput, output) => {
     if (!options.enabled) return;
     const sessionID = hookInput.sessionID;
-    debugLog(
+    log(
       `Autocontinue fired, session=${sessionID}, active=${activeSessions.has(sessionID)}`,
     );
 
     if (activeSessions.has(sessionID)) {
-      debugLog(`Skipping — already sent update for session=${sessionID}`);
+      log(`Skipping — already sent update for session=${sessionID}`);
       return;
     }
 
@@ -157,22 +164,22 @@ const plugin = async (input, rawOptions) => {
     const promptFile = resolvePromptFile(options, projectRoot);
     const filePrompt = loadPromptFile(promptFile, projectRoot);
     const promptText = filePrompt || buildUpdatePrompt(options, projectRoot);
-    debugLog(
+    log(
       `Deferring AGENTS.md update prompt (${promptText.length} chars, source=${promptFile || "built-in"})`,
     );
 
     setTimeout(async () => {
       try {
-        debugLog(`Sending deferred AGENTS.md update prompt`);
+        log(`Sending deferred AGENTS.md update prompt`);
         await client.session.prompt({
           path: { id: sessionID },
           body: {
             parts: [{ type: "text", text: promptText }],
           },
         });
-        debugLog("AGENTS.md update prompt sent successfully");
+        log("AGENTS.md update prompt sent successfully");
       } catch (err) {
-        debugLog(`Failed to send AGENTS.md update: ${err.message}`);
+        log(`Failed to send AGENTS.md update: ${err.message}`);
       }
     }, 500);
   };
