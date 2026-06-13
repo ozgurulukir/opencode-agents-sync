@@ -28,10 +28,9 @@ Target file: ${agentsMdPath}
 
 Steps:
 1. Read the project-level AGENTS.md using the Read tool
-2. Read the global/user-level AGENTS.md at ~/.config/opencode/AGENTS.md (if it exists) to avoid duplicating content
-3. Identify genuinely new discoveries, architecture decisions, rules, or gotchas from this session
-4. Consolidate: merge new information into existing sections, remove outdated or redundant entries, and keep the file clean and organized
-5. Use the Edit tool to apply changes
+2. Identify genuinely new discoveries, architecture decisions, rules, or gotchas from this session
+3. Consolidate: merge new information into existing sections, remove outdated or redundant entries, and keep the file clean and organized
+4. Use the Edit tool to apply changes
 
 Target sections to update:
 ${sectionList}
@@ -177,9 +176,11 @@ const plugin = async (input, rawOptions) => {
             parts: [{ type: "text", text: promptText }],
           },
         });
-        log("AGENTS.md update prompt sent successfully");
+        log("AGENTS.md update prompt completed, clearing active flag");
+        activeSessions.delete(sessionID);
       } catch (err) {
         log(`Failed to send AGENTS.md update: ${err.message}`);
+        activeSessions.delete(sessionID);
       }
     }, 500);
   };
