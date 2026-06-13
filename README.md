@@ -30,6 +30,8 @@ With `continue: true`, two turns run sequentially: first the AGENTS.md update, t
 
 Only project-level AGENTS.md is updated. Global/user-level AGENTS.md (`~/.config/opencode/AGENTS.md`) is never touched. Skill definitions and non-project-specific information are excluded.
 
+> **Disclaimer — API costs**: Each auto-compaction triggers an extra LLM turn (read AGENTS.md + edit). With `continue: true`, that's two extra turns. On pay-per-token providers, this adds to your API costs. On long sessions with frequent compactions, the cumulative cost may be noticeable. If cost is a concern, consider disabling the plugin for less important projects or using it only with flat-rate providers.
+
 > **Tip**: The plugin modifies your project AGENTS.md automatically after each auto-compaction. Use `git` to track changes so you can review or revert updates.
 
 > **Warning**: The AGENTS.md update turn adds messages to the conversation history (user prompt + assistant response with file edits). This increases context usage. Cascade prevention stops infinite loops, but the update messages remain. With smaller context models, consider the extra token cost.
