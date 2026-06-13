@@ -1,12 +1,6 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import {
-  writeFileSync,
-  mkdirSync,
-  rmSync,
-  existsSync,
-  readFileSync,
-} from "node:fs";
+import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -29,6 +23,17 @@ function flushTimers(ms = 1000) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const DEFAULT_SECTIONS = [
+  "About",
+  "Setup",
+  "Development",
+  "Testing",
+  "Technologies",
+  "Rules",
+  "Known Issues",
+  "Notes",
+];
+
 describe("opencode-agents-sync", () => {
   it("should export a server function", () => {
     assert.equal(typeof plugin, "function");
@@ -36,28 +41,59 @@ describe("opencode-agents-sync", () => {
 
   describe("parseOptions", () => {
     it("should return defaults when no options provided", async () => {
-      const hooks = await plugin({ client: makeMockClient() });
-      assert.ok(hooks);
+      const mockClient = makeMockClient();
+      const hooks = await plugin({ client: mockClient });
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "test" },
+        { enabled: true },
+      );
+      await flushTimers();
+      const text = mockClient.calls[0].body.parts[0].text;
+      for (const section of DEFAULT_SECTIONS) {
+        assert.ok(
+          text.includes(section),
+          `Missing default section: ${section}`,
+        );
+      }
     });
 
     it("should default enabled to true", async () => {
-      await plugin({ client: makeMockClient() });
+      const mockClient = makeMockClient();
+      const hooks = await plugin({ client: mockClient });
+      const output = { enabled: true };
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "test" },
+        output,
+      );
+      assert.equal(output.enabled, false);
+      await flushTimers();
+      assert.equal(mockClient.calls.length, 1);
     });
 
-    it("should accept enabled: false", async () => {
-      const hooks = await plugin(
-        { client: makeMockClient() },
-        { enabled: false },
+    it("should accept enabled: false and skip prompt", async () => {
+      const mockClient = makeMockClient();
+      const hooks = await plugin({ client: mockClient }, { enabled: false });
+      const output = { enabled: true };
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "test" },
+        output,
       );
-      assert.ok(hooks);
+      assert.equal(output.enabled, true);
+      assert.equal(mockClient.calls.length, 0);
     });
 
     it("should accept empty sections array and fall back to defaults", async () => {
-      const hooks = await plugin(
-        { client: makeMockClient() },
-        { sections: [] },
+      const mockClient = makeMockClient();
+      const hooks = await plugin({ client: mockClient }, { sections: [] });
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "test" },
+        { enabled: true },
       );
-      assert.ok(hooks);
+      await flushTimers();
+      const text = mockClient.calls[0].body.parts[0].text;
+      for (const section of DEFAULT_SECTIONS) {
+        assert.ok(text.includes(section), `Missing section: ${section}`);
+      }
     });
 
     it("should accept single section", async () => {
@@ -77,13 +113,29 @@ describe("opencode-agents-sync", () => {
     });
 
     it("should handle null options gracefully", async () => {
-      const hooks = await plugin({ client: makeMockClient() }, null);
-      assert.ok(hooks);
+      const mockClient = makeMockClient();
+      const hooks = await plugin({ client: mockClient }, null);
+      const output = { enabled: true };
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "test" },
+        output,
+      );
+      assert.equal(output.enabled, false);
+      await flushTimers();
+      assert.equal(mockClient.calls.length, 1);
     });
 
     it("should handle undefined options gracefully", async () => {
-      const hooks = await plugin({ client: makeMockClient() }, undefined);
-      assert.ok(hooks);
+      const mockClient = makeMockClient();
+      const hooks = await plugin({ client: mockClient }, undefined);
+      const output = { enabled: true };
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "test" },
+        output,
+      );
+      assert.equal(output.enabled, false);
+      await flushTimers();
+      assert.equal(mockClient.calls.length, 1);
     });
   });
 
@@ -93,6 +145,14 @@ describe("opencode-agents-sync", () => {
         client: makeMockClient(),
         serverUrl: new URL("http://localhost:3000"),
       });
+      const logFile = join(
+        process.env.HOME || "/tmp",
+        ".local",
+        "share",
+        "opencode",
+        "agents-sync-debug.log",
+      );
+      assert.ok(existsSync(logFile));
     });
 
     it("should use mimocode dir when hostname contains mimocode", async () => {
@@ -100,6 +160,14 @@ describe("opencode-agents-sync", () => {
         client: makeMockClient(),
         serverUrl: new URL("http://mimocode.local:3000"),
       });
+      const logFile = join(
+        process.env.HOME || "/tmp",
+        ".local",
+        "share",
+        "mimocode",
+        "agents-sync-debug.log",
+      );
+      assert.ok(existsSync(logFile));
     });
 
     it("should use opencode dir when serverUrl is undefined", async () => {
@@ -107,6 +175,14 @@ describe("opencode-agents-sync", () => {
         client: makeMockClient(),
         serverUrl: undefined,
       });
+      const logFile = join(
+        process.env.HOME || "/tmp",
+        ".local",
+        "share",
+        "opencode",
+        "agents-sync-debug.log",
+      );
+      assert.ok(existsSync(logFile));
     });
   });
 
@@ -472,7 +548,7 @@ describe("opencode-agents-sync", () => {
         assert.equal(mockClient.calls[1].path.id, "ses_B");
       });
 
-      it("should allow concurrent updates for different sessions", async () => {
+      it("should block session A during update while session B proceeds", async () => {
         const mockClient = makeMockClient();
         const hooks = await plugin({ client: mockClient });
 
@@ -480,13 +556,24 @@ describe("opencode-agents-sync", () => {
           { sessionID: "ses_X" },
           { enabled: true },
         );
+        const outputA2 = { enabled: true };
+        await hooks["experimental.compaction.autocontinue"](
+          { sessionID: "ses_X" },
+          outputA2,
+        );
+        assert.equal(outputA2.enabled, true);
+
+        const outputB = { enabled: true };
         await hooks["experimental.compaction.autocontinue"](
           { sessionID: "ses_Y" },
-          { enabled: true },
+          outputB,
         );
+        assert.equal(outputB.enabled, false);
 
         await flushTimers();
         assert.equal(mockClient.calls.length, 2);
+        assert.equal(mockClient.calls[0].path.id, "ses_X");
+        assert.equal(mockClient.calls[1].path.id, "ses_Y");
       });
     });
 
