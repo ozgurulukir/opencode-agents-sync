@@ -12,6 +12,14 @@ When auto-compaction completes, the plugin:
 
 Only project-level AGENTS.md is updated. Global/user-level AGENTS.md (`~/.config/opencode/AGENTS.md`) is never touched. Skill definitions and non-project-specific information are excluded.
 
+> **Tip**: The plugin modifies your project AGENTS.md automatically after each auto-compaction. Use `git` to track changes so you can review or revert updates.
+
+> **Warning**: The AGENTS.md update turn adds messages to the conversation history (user prompt + assistant response with file edits). This increases context usage. Cascade prevention stops infinite loops, but the update messages remain. With smaller context models, consider the extra token cost.
+
+> **Note**: The quality of AGENTS.md updates depends on the model you use. Stronger models produce better consolidations. The update prompt appears as a visible user message in the conversation — this is expected behavior.
+
+> **Troubleshooting**: If the plugin doesn't seem to work, check the debug log at `~/.local/share/mimocode/agents-sync-debug.log` (used by both OpenCode and MiMo Code). Look for "Autocontinue fired" entries.
+
 ## Installation
 
 Plugins are loaded as flat `.js` files from the `plugins/` directory. Subdirectories are not resolved.
