@@ -8,21 +8,22 @@ MIMOCODE_DIR="$HOME/.config/mimocode"
 install_for() {
   local name="$1"
   local config_dir="$2"
-  local sdk_package="$3"
+  local sdk_package="${3:-}"
 
   echo "Installing for $name..."
 
   mkdir -p "$config_dir/plugins"
   ln -sf "$PLUGIN_DIR/index.js" "$config_dir/plugins/opencode-agents-sync.js"
 
-  if [ ! -f "$config_dir/package.json" ]; then
-    echo '{"dependencies":{}}' > "$config_dir/package.json"
+  if [ -n "$sdk_package" ] && [ ! -d "$config_dir/node_modules/$sdk_package" ]; then
+    echo "  Installing SDK dependency: $sdk_package"
+    if [ ! -f "$config_dir/package.json" ]; then
+      echo '{"dependencies":{}}' > "$config_dir/package.json"
+    fi
+    (cd "$config_dir" && npm install "$sdk_package" --save)
   fi
 
-  cd "$config_dir"
-  npm install "$sdk_package" --save
-
-  echo "✓ $name installed"
+  echo "✓ $name installed (symlink: $config_dir/plugins/opencode-agents-sync.js → $PLUGIN_DIR/index.js)"
 }
 
 if [ -d "$OPENCODE_DIR" ]; then
