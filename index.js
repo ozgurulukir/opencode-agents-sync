@@ -1,5 +1,16 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const PLUGIN_VERSION = (() => {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    return JSON.parse(readFileSync(join(here, "package.json"), "utf-8"))
+      .version;
+  } catch {
+    return "unknown";
+  }
+})();
 
 const DEFAULT_SECTIONS = [
   "About",
@@ -72,10 +83,13 @@ function parseOptions(raw) {
   };
 }
 
-function loadPromptFile(promptFile, projectRoot) {
+function loadPromptFile(promptFile, projectRoot, log) {
   if (!promptFile) return null;
   try {
-    if (!existsSync(promptFile)) return null;
+    if (!existsSync(promptFile)) {
+      log(`Prompt file not found: ${promptFile}`);
+      return null;
+    }
     let content = readFileSync(promptFile, "utf-8").trim();
     const globalAgentsMd = join(
       process.env.HOME || "/tmp",
@@ -88,36 +102,51 @@ function loadPromptFile(promptFile, projectRoot) {
       : "AGENTS.md";
     content = content.replaceAll("{{project_agents_md}}", projectAgentsMd);
     content = content.replaceAll("{{global_agents_md}}", globalAgentsMd);
+    log(`Loaded prompt file: ${promptFile} (${content.length} chars)`);
     return content;
-  } catch {
+  } catch (err) {
+    log(`Failed to load prompt file ${promptFile}: ${err.code || err.message}`);
     return null;
   }
 }
 
-function resolvePromptFile(options, projectRoot) {
-  if (options.promptFile) return options.promptFile;
+function resolvePromptFile(options, projectRoot, log) {
+  if (options.promptFile) {
+    log(`Using promptFile from config: ${options.promptFile}`);
+    return options.promptFile;
+  }
   const projectPrompt = projectRoot
     ? join(projectRoot, ".opencode", "agents-sync-prompt.md")
     : null;
-  if (projectPrompt && existsSync(projectPrompt)) return projectPrompt;
+  if (projectPrompt && existsSync(projectPrompt)) {
+    log(`Found project-level prompt: ${projectPrompt}`);
+    return projectPrompt;
+  }
   const globalPrompt = join(
     process.env.HOME || "/tmp",
     ".config",
     "opencode",
     "agents-sync-prompt.md",
   );
-  if (existsSync(globalPrompt)) return globalPrompt;
+  if (existsSync(globalPrompt)) {
+    log(`Found global-level prompt: ${globalPrompt}`);
+    return globalPrompt;
+  }
+  log("No custom prompt file found, using built-in");
   return null;
 }
 
 function writeDebugLog(logDir, msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
   try {
     mkdirSync(logDir, { recursive: true });
-    appendFileSync(
-      join(logDir, "agents-sync-debug.log"),
-      `[${new Date().toISOString()}] ${msg}\n`,
+    appendFileSync(join(logDir, "agents-sync-debug.log"), line);
+  } catch (err) {
+    console.error(
+      `[opencode-agents-sync] Failed to write debug log: ${err.code || err.message}`,
     );
-  } catch {}
+    console.error(`[opencode-agents-sync] Original message: ${msg}`);
+  }
 }
 
 function resolveLogDir(input) {
@@ -134,22 +163,33 @@ const plugin = async (input, rawOptions) => {
   const { client, directory: projectRoot } = input;
   const logDir = resolveLogDir(input);
   const log = (msg) => writeDebugLog(logDir, msg);
-  log(`Plugin loaded, enabled=${options.enabled}, projectRoot=${projectRoot}`);
+  log(
+    `Plugin v${PLUGIN_VERSION} loaded, enabled=${options.enabled}, continue=${options.continue}, projectRoot=${projectRoot}, logDir=${logDir}`,
+  );
 
   const hooks = {};
   const activeSessions = new Set();
 
   if (options.template) {
     hooks["experimental.session.compacting"] = async (hookInput, output) => {
-      if (!options.enabled) return;
-      log(`Using custom template as prompt (${options.template.length} chars)`);
+      const sessionID = hookInput.sessionID;
+      if (!options.enabled) {
+        log(`compacting hook skipped (disabled), session=${sessionID}`);
+        return;
+      }
+      log(
+        `Using custom template as prompt (${options.template.length} chars), session=${sessionID}`,
+      );
       output.prompt = options.template;
     };
   }
 
   hooks["experimental.compaction.autocontinue"] = async (hookInput, output) => {
-    if (!options.enabled) return;
     const sessionID = hookInput.sessionID;
+    if (!options.enabled) {
+      log(`autocontinue hook skipped (disabled), session=${sessionID}`);
+      return;
+    }
     log(
       `Autocontinue fired, session=${sessionID}, active=${activeSessions.has(sessionID)}`,
     );
@@ -164,14 +204,15 @@ const plugin = async (input, rawOptions) => {
       output.enabled = false;
     }
 
-    const promptFile = resolvePromptFile(options, projectRoot);
-    const filePrompt = loadPromptFile(promptFile, projectRoot);
+    const promptFile = resolvePromptFile(options, projectRoot, log);
+    const filePrompt = loadPromptFile(promptFile, projectRoot, log);
     const promptText = filePrompt || buildUpdatePrompt(options, projectRoot);
     log(
       `Deferring AGENTS.md update prompt (${promptText.length} chars, source=${promptFile || "built-in"})`,
     );
 
     setTimeout(async () => {
+      const startTime = Date.now();
       try {
         log(`Sending deferred AGENTS.md update prompt`);
         await client.session.prompt({
@@ -180,10 +221,15 @@ const plugin = async (input, rawOptions) => {
             parts: [{ type: "text", text: promptText }],
           },
         });
-        log("AGENTS.md update prompt completed, clearing active flag");
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        log(`AGENTS.md update completed in ${elapsed}s, clearing active flag`);
         activeSessions.delete(sessionID);
       } catch (err) {
-        log(`Failed to send AGENTS.md update: ${err.message}`);
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        log(
+          `Failed to send AGENTS.md update after ${elapsed}s: ${err.code || err.message}`,
+        );
+        log(`Stack: ${err.stack || "n/a"}`);
         activeSessions.delete(sessionID);
       }
     }, 500);

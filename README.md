@@ -94,12 +94,6 @@ To pass options, reference the local file path relative to the config directory:
 }
 ```
 
-]
-]
-}
-
-````
-
 ### Options
 
 | Option       | Type       | Default        | Description                                  |
@@ -114,9 +108,9 @@ To pass options, reference the local file path relative to the config directory:
 
 You can override the built-in update prompt by placing a `agents-sync-prompt.md` file in one of these locations (checked in order):
 
-1. **Project level**: `<project>/.opencode/agents-sync-prompt.md`
-2. **Global level**: `~/.config/opencode/agents-sync-prompt.md`
-3. **Config option**: `"promptFile": "/absolute/path/to/template.md"`
+1. **Config option**: `"promptFile": "/absolute/path/to/template.md"` — highest priority
+2. **Project level**: `<project>/.opencode/agents-sync-prompt.md`
+3. **Global level**: `~/.config/opencode/agents-sync-prompt.md`
 
 The file is read on each compaction — no plugin restart needed. Changes take effect on the next auto-compaction.
 
@@ -132,7 +126,7 @@ Example `agents-sync-prompt.md`:
 ```markdown
 Update {{project_agents_md}} with new discoveries from this session.
 Skip anything already in {{global_agents_md}}.
-````
+```
 
 ## Default Sections
 

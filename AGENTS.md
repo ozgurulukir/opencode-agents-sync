@@ -13,7 +13,7 @@ Plugin that updates project-level AGENTS.md after auto-compaction in OpenCode an
 
 ### Hooks Used
 
-- **`experimental.compaction.autocontinue`** (primary): Fires after auto-compaction succeeds. Plugin disables the default "Continue..." message and sends an AGENTS.md update prompt via `client.session.prompt()`.
+- **`experimental.compaction.autocontinue`** (primary): Fires after auto-compaction succeeds. Plugin sends an AGENTS.md update prompt via `client.session.prompt()`. By default replaces the "Continue..." message; configurable via `continue` option.
 - **`experimental.session.compacting`** (optional): Only registered when `template` option is provided. Replaces the compaction prompt entirely.
 
 ### Data Flow
@@ -22,11 +22,12 @@ Plugin that updates project-level AGENTS.md after auto-compaction in OpenCode an
 Auto-compaction triggered (context overflow)
   → Compaction LLM summarizes conversation (tools: {}, no file access)
   → experimental.compaction.autocontinue fires
-  → Plugin sets output.enabled = false (skip default continue)
   → Plugin tracks session in activeSessions Set (prevent cascade)
+  → If continue=false: output.enabled = false (skip default continue)
   → setTimeout(500ms) defers prompt to avoid deadlock
   → client.session.prompt() sends update through normal agent loop (with tools)
   → LLM reads AGENTS.md, identifies new info, uses Edit tool to update
+  → activeSessions flag cleared after update completes (allows re-trigger)
 ```
 
 ### Key Design Decisions
@@ -41,7 +42,7 @@ Calling `client.session.prompt()` inside the autocontinue hook creates a deadloc
 
 **Why track `activeSessions`?**
 
-Without tracking, a cascade can occur: the update prompt adds to context → triggers another compaction → sends another update prompt → infinite loop. The `activeSessions` Set ensures only one prompt per session; subsequent autocontinue calls are skipped.
+Without tracking, a cascade can occur: the update prompt adds to context → triggers another compaction → sends another update prompt → infinite loop. The `activeSessions` Set blocks concurrent triggers during an active update. The flag is cleared after the update completes (success or error), allowing subsequent compactions to trigger new updates within the same session.
 
 **Why only auto-compaction (not manual `/compact`)?**
 
@@ -71,24 +72,26 @@ Variables: `{{project_agents_md}}`, `{{global_agents_md}}`
 
 ## Configuration
 
-```json
+```jsonc
 {
   "plugin": [
     [
-      "opencode-agents-sync",
+      "./plugins/opencode-agents-sync.js",
       {
         "enabled": true,
+        "continue": false,
         "sections": ["About", "Setup", "Rules", "Known Issues"],
-        "promptFile": "/path/to/custom-template.md"
-      }
-    ]
-  ]
+        "promptFile": "/path/to/custom-template.md",
+      },
+    ],
+  ],
 }
 ```
 
 | Option       | Type     | Default | Description                                  |
 | ------------ | -------- | ------- | -------------------------------------------- |
 | `enabled`    | boolean  | `true`  | Enable/disable the plugin                    |
+| `continue`   | boolean  | `false` | Also send default "Continue..." after update |
 | `sections`   | string[] | all 8   | Which sections to target                     |
 | `promptFile` | string   | `null`  | Absolute path to custom prompt template      |
 | `template`   | string   | `null`  | Raw compaction prompt replacement (advanced) |
@@ -96,14 +99,15 @@ Variables: `{{project_agents_md}}`, `{{global_agents_md}}`
 ## Essential Commands
 
 ```bash
-# Run all tests (16 tests)
+# Run all tests (37 tests)
 node --test 'test/*.test.js'
 
 # Install (symlink + SDK deps)
 ./install.sh
 
 # Debug log
-tail -f ~/.local/share/mimocode/agents-sync-debug.log
+tail -f ~/.local/share/opencode/agents-sync-debug.log   # OpenCode
+tail -f ~/.local/share/mimocode/agents-sync-debug.log   # MiMo Code
 ```
 
 ## Code Conventions
@@ -122,21 +126,21 @@ Optional peer dependencies (auto-discovered at runtime):
 ## Common Gotchas
 
 1. **No manual compaction support**: `/compact` sends `auto: false`, hook never fires
-2. **Cascade prevention**: `activeSessions` Set limits to one prompt per session
+2. **Cascade prevention**: `activeSessions` Set blocks concurrent triggers during active update, cleared after completion
 3. **Deadlock avoidance**: `setTimeout(500ms)` required before `client.session.prompt()`
 4. **Plugin must be auto-discovered**: Place symlink in `~/.config/opencode/plugins/`, no config entry needed
-5. **Debug log location**: `~/.local/share/mimocode/agents-sync-debug.log` (even for OpenCode)
+5. **Debug log location**: `~/.local/share/opencode/agents-sync-debug.log` for OpenCode, `~/.local/share/mimocode/agents-sync-debug.log` for MiMo Code
 
 ## Project Structure
 
 ```
 opencode-agents-sync/
-├── index.js          # Plugin entry (single file, ~160 lines)
+├── index.js          # Plugin entry (single file, ~210 lines)
 ├── package.json      # NPM package configuration
 ├── README.md         # User documentation
 ├── AGENTS.md         # This file
 ├── install.sh        # Symlink + SDK install script
 ├── test/
-│   └── plugin.test.js # 16 tests (compacting, autocontinue, cascade, prompt file)
+│   └── plugin.test.js # 37 tests (compacting, autocontinue, cascade, prompt file, multi-session)
 └── LICENSE           # MIT License
 ```
