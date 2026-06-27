@@ -124,7 +124,7 @@ tail -f ~/.local/share/mimocode/agents-sync-debug.log   # MiMo Code
 ## Code Conventions
 
 - **Indentation**: 2 spaces, semicolons, double quotes, backticks for templates (enforced via `.prettierrc.json`)
-- **Exports**: `export default plugin` + `export { plugin as server }`
+- **Exports**: `export default { server: plugin }` (OpenCode v1 plugin loader contract)
 - **Hook pattern**: async function, guard clause for `enabled`, debug logging
 
 ## Dependencies
@@ -147,7 +147,7 @@ Optional peer dependencies (auto-discovered at runtime):
 
 ```
 opencode-agents-sync/
-├── index.js           # Plugin entry (single file, ~210 lines)
+├── index.js           # Plugin entry (single file, ~320 lines)
 ├── package.json       # NPM package configuration
 ├── README.md          # User documentation
 ├── AGENTS.md          # This file
