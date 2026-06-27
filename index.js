@@ -320,5 +320,4 @@ const plugin = async (input, rawOptions) => {
   return hooks;
 };
 
-export default plugin;
-export { plugin as server };
+export default { server: plugin };

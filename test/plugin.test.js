@@ -4,7 +4,8 @@ import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const { default: plugin, _setPromptTimers } = await import("../index.js");
+const { default: pluginObj, _setPromptTimers } = await import("../index.js");
+const plugin = pluginObj.server;
 
 function makeMockClient(errorOnPrompt = false, failTimes = 0) {
   const calls = [];
