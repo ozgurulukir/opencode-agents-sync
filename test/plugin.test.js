@@ -332,6 +332,39 @@ describe("opencode-agents-sync", () => {
       await flushTimers();
       assert.equal(mockClient.calls[0].body.parts[0].text, "Config prompt");
     });
+
+    it("should use global prompt under XDG_CONFIG_HOME", async () => {
+      writeFileSync(
+        join(globalDir, "opencode", "agents-sync-prompt.md"),
+        "XDG global prompt",
+      );
+      const mockClient = makeMockClient();
+      const hooks = await plugin({ client: mockClient, directory: tmpDir });
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "test" },
+        { enabled: true },
+      );
+      await flushTimers();
+      assert.equal(mockClient.calls[0].body.parts[0].text, "XDG global prompt");
+    });
+
+    it("should resolve {{global_agents_md}} under XDG_CONFIG_HOME", async () => {
+      writeFileSync(
+        join(globalDir, "opencode", "agents-sync-prompt.md"),
+        "Check {{global_agents_md}}",
+      );
+      const mockClient = makeMockClient();
+      const hooks = await plugin({ client: mockClient, directory: tmpDir });
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "test" },
+        { enabled: true },
+      );
+      await flushTimers();
+      assert.equal(
+        mockClient.calls[0].body.parts[0].text,
+        `Check ${join(globalDir, "opencode", "AGENTS.md")}`,
+      );
+    });
   });
 
   describe("experimental.session.compacting", () => {

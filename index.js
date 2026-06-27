@@ -1,5 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { isAbsolute, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PLUGIN_VERSION = (() => {
@@ -25,6 +25,17 @@ const DEFAULT_SECTIONS = [
 
 function buildSectionList(sections) {
   return sections.map((s) => `- ${s}`).join("\n");
+}
+
+// Mirrors OpenCode's config dir resolution (xdg-basedir): $XDG_CONFIG_HOME/opencode,
+// falling back to ~/.config/opencode. Used for the global user-level AGENTS.md
+// and the global prompt template lookup.
+function resolveGlobalConfigDir() {
+  const xdg = process.env.XDG_CONFIG_HOME;
+  if (xdg && isAbsolute(xdg)) {
+    return join(xdg, "opencode");
+  }
+  return join(process.env.HOME || "/tmp", ".config", "opencode");
 }
 
 function buildUpdatePrompt(options, projectRoot) {
@@ -91,12 +102,7 @@ function loadPromptFile(promptFile, projectRoot, log) {
       return null;
     }
     let content = readFileSync(promptFile, "utf-8").trim();
-    const globalAgentsMd = join(
-      process.env.HOME || "/tmp",
-      ".config",
-      "opencode",
-      "AGENTS.md",
-    );
+    const globalAgentsMd = join(resolveGlobalConfigDir(), "AGENTS.md");
     const projectAgentsMd = projectRoot
       ? join(projectRoot, "AGENTS.md")
       : "AGENTS.md";
@@ -122,12 +128,7 @@ function resolvePromptFile(options, projectRoot, log) {
     log(`Found project-level prompt: ${projectPrompt}`);
     return projectPrompt;
   }
-  const globalPrompt = join(
-    process.env.HOME || "/tmp",
-    ".config",
-    "opencode",
-    "agents-sync-prompt.md",
-  );
+  const globalPrompt = join(resolveGlobalConfigDir(), "agents-sync-prompt.md");
   if (existsSync(globalPrompt)) {
     log(`Found global-level prompt: ${globalPrompt}`);
     return globalPrompt;

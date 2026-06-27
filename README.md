@@ -112,7 +112,7 @@ You can override the built-in update prompt by placing a `agents-sync-prompt.md`
 
 1. **Config option**: `"promptFile": "/absolute/path/to/template.md"` — highest priority
 2. **Project level**: `<project>/.opencode/agents-sync-prompt.md`
-3. **Global level**: `~/.config/opencode/agents-sync-prompt.md`
+3. **Global level**: `$XDG_CONFIG_HOME/opencode/agents-sync-prompt.md` (or `~/.config/opencode/agents-sync-prompt.md` if `XDG_CONFIG_HOME` is unset)
 
 The file is read on each compaction — no plugin restart needed. Changes take effect on the next auto-compaction.
 

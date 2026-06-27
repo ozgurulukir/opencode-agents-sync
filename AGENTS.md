@@ -69,7 +69,7 @@ Prompt is resolved in order:
 
 1. `promptFile` config option (absolute path)
 2. `<project>/.opencode/agents-sync-prompt.md`
-3. `~/.config/opencode/agents-sync-prompt.md`
+3. `$XDG_CONFIG_HOME/opencode/agents-sync-prompt.md` (or `~/.config/opencode/agents-sync-prompt.md` if unset)
 4. Built-in template
 
 Read on each hook invocation — hot reload without restart.
@@ -105,7 +105,7 @@ Variables: `{{project_agents_md}}`, `{{global_agents_md}}`
 ## Essential Commands
 
 ```bash
-# Run all tests (37 tests)
+# Run all tests (39 tests)
 node --test 'test/*.test.js'
 
 # Install (symlink + SDK deps)
@@ -148,6 +148,6 @@ opencode-agents-sync/
 ├── AGENTS.md         # This file
 ├── install.sh        # Symlink + SDK install script
 ├── test/
-│   └── plugin.test.js # 37 tests (compacting, autocontinue, cascade, prompt file, multi-session)
+│   └── plugin.test.js # 39 tests (compacting, autocontinue, cascade, prompt file, multi-session, XDG)
 └── LICENSE           # MIT License
 ```
