@@ -4,7 +4,7 @@ import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const { default: plugin } = await import("../index.js");
+const { default: plugin, _setPromptTimers } = await import("../index.js");
 
 function makeMockClient(errorOnPrompt = false, failTimes = 0) {
   const calls = [];
@@ -24,7 +24,9 @@ function makeMockClient(errorOnPrompt = false, failTimes = 0) {
   };
 }
 
-function flushTimers(ms = 1000) {
+let _flushDelay = 1000;
+
+function flushTimers(ms = _flushDelay) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
@@ -40,6 +42,18 @@ const DEFAULT_SECTIONS = [
 ];
 
 describe("opencode-agents-sync", () => {
+  beforeEach(async () => {
+    // Fast mode: skip production delays; 10ms flush is enough for event loop
+    // to process all pending setTimeout(0) callbacks deterministically.
+    _setPromptTimers(0, 0, 3);
+    _flushDelay = 10;
+  });
+
+  afterEach(() => {
+    // Restore production timing defaults after each test.
+    _setPromptTimers(500, 500, 3);
+    _flushDelay = 1000;
+  });
   it("should export a server function", () => {
     assert.equal(typeof plugin, "function");
   });
@@ -633,7 +647,7 @@ describe("opencode-agents-sync", () => {
       assert.equal(output.enabled, false);
 
       // The send retries with backoff; wait for all attempts to be exhausted.
-      await flushTimers(2500);
+      await flushTimers();
       assert.equal(mockClient.calls.length, 0);
 
       // Flag is cleared once retries are exhausted, so a fresh trigger proceeds.
@@ -645,7 +659,7 @@ describe("opencode-agents-sync", () => {
       assert.equal(output2.enabled, false);
       assert.equal(mockClient.calls.length, 0);
 
-      await flushTimers(2500);
+      await flushTimers();
     });
 
     it("should retry the prompt send and succeed on a later attempt", async () => {
@@ -656,7 +670,7 @@ describe("opencode-agents-sync", () => {
         { sessionID: "ses_retry" },
         { enabled: true },
       );
-      await flushTimers(2500);
+      await flushTimers();
       assert.equal(mockClient.calls.length, 1);
     });
 
@@ -761,7 +775,6 @@ describe("opencode-agents-sync", () => {
         await flushTimers();
         const text = mockClient.calls[0].body.parts[0].text;
         assert.ok(text.includes(join(tmpDir, "AGENTS.md")));
-        assert.ok(text.includes("AGENTS.md"));
         assert.ok(!text.includes("{{"));
       });
 

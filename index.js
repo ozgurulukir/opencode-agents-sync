@@ -40,9 +40,21 @@ const DEBUG_LOG_DEFAULT_MAX_BYTES = 1024 * 1024;
 // process still holds the session lock, so the prompt must be deferred to avoid
 // a deadlock. If the send still fails (e.g. transient lock contention), retry a
 // few times with backoff instead of dropping the update silently.
-const PROMPT_DEFER_MS = 500;
-const PROMPT_MAX_ATTEMPTS = 3;
-const PROMPT_RETRY_DELAY_MS = 500;
+let PROMPT_DEFER_MS = 500;
+let PROMPT_MAX_ATTEMPTS = 3;
+let PROMPT_RETRY_DELAY_MS = 500;
+
+// Test-only override to speed up execution (skip delays by setting all to 0).
+// Tests should call _setPromptTimers(0, 0, 0) to bypass all waits and run instantly.
+export function _setPromptTimers(
+  deferMs = null,
+  retryDelayMs = null,
+  maxAttempts = null,
+) {
+  if (deferMs !== null) PROMPT_DEFER_MS = deferMs;
+  if (retryDelayMs !== null) PROMPT_RETRY_DELAY_MS = retryDelayMs;
+  if (maxAttempts !== null) PROMPT_MAX_ATTEMPTS = maxAttempts;
+}
 
 function buildSectionList(sections) {
   return sections.map((s) => `- ${s}`).join("\n");
