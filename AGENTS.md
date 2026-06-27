@@ -46,7 +46,7 @@ Without tracking, a cascade can occur: the update prompt adds to context → tri
 
 **Why only auto-compaction (not manual `/compact`)?**
 
-`experimental.compaction.autocontinue` only fires when `input.auto === true`. Manual `/compact` sends `auto: false`, so the hook is never triggered. This is an OpenCode SDK limitation.
+OpenCode gates the trigger in the caller (`packages/opencode/src/session/compaction.ts`: `if (result === "continue" && input.auto)`), not in the hook. The hook input is `{ sessionID, agent, model, provider, message, overflow }` — it has **no `auto` field**. Manual `/compact` runs with `auto: false`, so the caller skips the trigger entirely and the hook never fires. This is an OpenCode SDK limitation.
 
 **Scope: project-level only**
 
@@ -125,7 +125,7 @@ Optional peer dependencies (auto-discovered at runtime):
 
 ## Common Gotchas
 
-1. **No manual compaction support**: `/compact` sends `auto: false`, hook never fires
+1. **No manual compaction support**: `/compact` runs `auto: false`, so the caller never triggers the autocontinue hook
 2. **Cascade prevention**: `activeSessions` Set blocks concurrent triggers during active update, cleared after completion
 3. **Deadlock avoidance**: `setTimeout(500ms)` required before `client.session.prompt()`
 4. **Plugin must be auto-discovered**: Place symlink in `~/.config/opencode/plugins/`, no config entry needed
