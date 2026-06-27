@@ -1,4 +1,11 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+} from "node:fs";
 import { isAbsolute, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -22,6 +29,12 @@ const DEFAULT_SECTIONS = [
   "Known Issues",
   "Notes",
 ];
+
+// Debug log size cap. When the current log exceeds this, it is rotated to
+// `<log>.1` (one backup kept) so the file cannot grow unbounded. Tunable via
+// the AGENTS_SYNC_LOG_MAX_BYTES env var (read per write, so it is hot-reloadable
+// and easy to exercise in tests).
+const DEBUG_LOG_DEFAULT_MAX_BYTES = 1024 * 1024;
 
 function buildSectionList(sections) {
   return sections.map((s) => `- ${s}`).join("\n");
@@ -77,6 +90,7 @@ function parseOptions(raw) {
     return {
       enabled: true,
       continue: false,
+      debug: true,
       template: null,
       sections: DEFAULT_SECTIONS,
       promptFile: null,
@@ -85,6 +99,7 @@ function parseOptions(raw) {
   return {
     enabled: raw.enabled !== false,
     continue: raw.continue === true,
+    debug: raw.debug !== false,
     template: raw.template || null,
     sections:
       Array.isArray(raw.sections) && raw.sections.length > 0
@@ -137,11 +152,33 @@ function resolvePromptFile(options, projectRoot, log) {
   return null;
 }
 
+function logMaxBytes() {
+  const n = Number(process.env.AGENTS_SYNC_LOG_MAX_BYTES);
+  return Number.isFinite(n) && n > 0 ? n : DEBUG_LOG_DEFAULT_MAX_BYTES;
+}
+
+function rotateDebugLogIfNeeded(logPath) {
+  let size;
+  try {
+    size = statSync(logPath).size;
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err;
+    return; // No log file yet — nothing to rotate.
+  }
+  if (size > logMaxBytes()) {
+    // Keep one backup so recent history survives an overflow instead of being
+    // truncated. renameSync overwrites any previous `.1`.
+    renameSync(logPath, `${logPath}.1`);
+  }
+}
+
 function writeDebugLog(logDir, msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
+  const logPath = join(logDir, "agents-sync-debug.log");
   try {
     mkdirSync(logDir, { recursive: true });
-    appendFileSync(join(logDir, "agents-sync-debug.log"), line);
+    rotateDebugLogIfNeeded(logPath);
+    appendFileSync(logPath, line);
   } catch (err) {
     console.error(
       `[opencode-agents-sync] Failed to write debug log: ${err.code || err.message}`,
@@ -163,9 +200,9 @@ const plugin = async (input, rawOptions) => {
   const options = parseOptions(rawOptions);
   const { client, directory: projectRoot } = input;
   const logDir = resolveLogDir(input);
-  const log = (msg) => writeDebugLog(logDir, msg);
+  const log = options.debug ? (msg) => writeDebugLog(logDir, msg) : () => {};
   log(
-    `Plugin v${PLUGIN_VERSION} loaded, enabled=${options.enabled}, continue=${options.continue}, projectRoot=${projectRoot}, logDir=${logDir}`,
+    `Plugin v${PLUGIN_VERSION} loaded, enabled=${options.enabled}, continue=${options.continue}, debug=${options.debug}, projectRoot=${projectRoot}, logDir=${logDir}`,
   );
 
   const hooks = {};

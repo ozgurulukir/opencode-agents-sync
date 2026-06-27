@@ -40,7 +40,7 @@ Only project-level AGENTS.md is updated. Global/user-level AGENTS.md (`~/.config
 
 > **Note**: The plugin runs only on auto-compaction, never on manual `/compact`. Additionally, when a compaction is triggered by context overflow and a prior message can be replayed, OpenCode replays it instead of firing the hook, so no update happens for that turn — the next regular auto-compaction resumes updates.
 
-> **Troubleshooting**: If the plugin doesn't seem to work, check the debug log. For OpenCode: `~/.local/share/opencode/agents-sync-debug.log`. For MiMo Code: `~/.local/share/mimocode/agents-sync-debug.log`. Look for "Autocontinue fired" entries.
+> **Troubleshooting**: If the plugin doesn't seem to work, check the debug log. For OpenCode: `~/.local/share/opencode/agents-sync-debug.log`. For MiMo Code: `~/.local/share/mimocode/agents-sync-debug.log`. Look for "Autocontinue fired" entries. The log rotates to a `.1` backup once it exceeds 1 MiB (tunable via the `AGENTS_SYNC_LOG_MAX_BYTES` env var). Set `"debug": false` to silence logging entirely.
 
 ## Installation
 
@@ -102,6 +102,7 @@ To pass options, reference the local file path relative to the config directory:
 | ------------ | ---------- | -------------- | -------------------------------------------- |
 | `enabled`    | `boolean`  | `true`         | Enable/disable the plugin                    |
 | `continue`   | `boolean`  | `false`        | Also send default "Continue..." after update |
+| `debug`      | `boolean`  | `true`         | Write the debug log (set `false` to silence) |
 | `sections`   | `string[]` | All 8 sections | Which sections to target                     |
 | `promptFile` | `string`   | `null`         | Absolute path to custom prompt template file |
 | `template`   | `string`   | `null`         | Raw compaction prompt replacement (advanced) |

@@ -98,6 +98,7 @@ Variables: `{{project_agents_md}}`, `{{global_agents_md}}`
 | ------------ | -------- | ------- | -------------------------------------------- |
 | `enabled`    | boolean  | `true`  | Enable/disable the plugin                    |
 | `continue`   | boolean  | `false` | Also send default "Continue..." after update |
+| `debug`      | boolean  | `true`  | Write the debug log (set `false` to silence) |
 | `sections`   | string[] | all 8   | Which sections to target                     |
 | `promptFile` | string   | `null`  | Absolute path to custom prompt template      |
 | `template`   | string   | `null`  | Raw compaction prompt replacement (advanced) |
@@ -105,7 +106,7 @@ Variables: `{{project_agents_md}}`, `{{global_agents_md}}`
 ## Essential Commands
 
 ```bash
-# Run all tests (39 tests)
+# Run all tests (41 tests)
 node --test 'test/*.test.js'
 
 # Install (symlink + SDK deps)
@@ -135,7 +136,7 @@ Optional peer dependencies (auto-discovered at runtime):
 2. **Cascade prevention**: `activeSessions` Set blocks concurrent triggers during active update, cleared after completion
 3. **Deadlock avoidance**: `setTimeout(500ms)` required before `client.session.prompt()`
 4. **Plugin must be auto-discovered**: Place symlink in `~/.config/opencode/plugins/`, no config entry needed
-5. **Debug log location**: `~/.local/share/opencode/agents-sync-debug.log` for OpenCode, `~/.local/share/mimocode/agents-sync-debug.log` for MiMo Code
+5. **Debug log location**: `~/.local/share/opencode/agents-sync-debug.log` for OpenCode, `~/.local/share/mimocode/agents-sync-debug.log` for MiMo Code. Rotates to `.1` at 1 MiB (tunable via `AGENTS_SYNC_LOG_MAX_BYTES`); silence with `"debug": false`
 6. **Overflow + replay skips update**: on overflow compaction (`overflow: true`) with a replayable prior user message, OpenCode replays instead of firing autocontinue, so the plugin doesn't run that turn
 
 ## Project Structure
@@ -148,6 +149,6 @@ opencode-agents-sync/
 ├── AGENTS.md         # This file
 ├── install.sh        # Symlink + SDK install script
 ├── test/
-│   └── plugin.test.js # 39 tests (compacting, autocontinue, cascade, prompt file, multi-session, XDG)
+│   └── plugin.test.js # 41 tests (compacting, autocontinue, cascade, prompt file, multi-session, XDG, debug log)
 └── LICENSE           # MIT License
 ```

@@ -186,6 +186,49 @@ describe("opencode-agents-sync", () => {
     });
   });
 
+  describe("debug log", () => {
+    let tmpHome, oldHome, oldCap;
+
+    beforeEach(() => {
+      tmpHome = join(
+        tmpdir(),
+        `agents-sync-log-${Date.now()}-${Math.random()}`,
+      );
+      mkdirSync(tmpHome, { recursive: true });
+      oldHome = process.env.HOME;
+      oldCap = process.env.AGENTS_SYNC_LOG_MAX_BYTES;
+      process.env.HOME = tmpHome;
+    });
+
+    afterEach(() => {
+      process.env.HOME = oldHome;
+      if (oldCap === undefined) delete process.env.AGENTS_SYNC_LOG_MAX_BYTES;
+      else process.env.AGENTS_SYNC_LOG_MAX_BYTES = oldCap;
+      rmSync(tmpHome, { recursive: true, force: true });
+    });
+
+    const logFile = () =>
+      join(tmpHome, ".local", "share", "opencode", "agents-sync-debug.log");
+
+    it("should rotate to .1 when the log exceeds the size cap", async () => {
+      process.env.AGENTS_SYNC_LOG_MAX_BYTES = "10";
+      const hooks = await plugin({ client: makeMockClient() });
+      // Loading wrote one line; firing the hook writes more, which pushes the
+      // current file past the tiny cap and rotates it to a .1 backup.
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "rot1" },
+        { enabled: true },
+      );
+      await flushTimers();
+      assert.ok(existsSync(`${logFile()}.1`), "expected rotated .1 backup");
+    });
+
+    it("should not write a debug log when debug option is false", async () => {
+      await plugin({ client: makeMockClient() }, { debug: false });
+      assert.equal(existsSync(logFile()), false);
+    });
+  });
+
   describe("buildUpdatePrompt", () => {
     it("should include consolidate instruction", async () => {
       const mockClient = makeMockClient();
