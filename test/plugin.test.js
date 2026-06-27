@@ -6,13 +6,18 @@ import { tmpdir } from "node:os";
 
 const { default: plugin } = await import("../index.js");
 
-function makeMockClient(errorOnPrompt = false) {
+function makeMockClient(errorOnPrompt = false, failTimes = 0) {
   const calls = [];
+  let failures = 0;
   return {
     calls,
     session: {
       prompt: async (opts) => {
         if (errorOnPrompt) throw new Error("Session lock error");
+        if (failures < failTimes) {
+          failures++;
+          throw new Error(`Transient failure ${failures}`);
+        }
         calls.push(opts);
       },
     },
@@ -594,7 +599,7 @@ describe("opencode-agents-sync", () => {
       assert.equal(mockClient.calls.length, 2);
     });
 
-    it("should handle prompt send error and clear flag", async () => {
+    it("should handle prompt send error and clear flag after retries", async () => {
       const mockClient = makeMockClient(true);
       const hooks = await plugin({ client: mockClient });
 
@@ -605,9 +610,11 @@ describe("opencode-agents-sync", () => {
       );
       assert.equal(output.enabled, false);
 
-      await flushTimers();
+      // The send retries with backoff; wait for all attempts to be exhausted.
+      await flushTimers(2500);
       assert.equal(mockClient.calls.length, 0);
 
+      // Flag is cleared once retries are exhausted, so a fresh trigger proceeds.
       const output2 = { enabled: true };
       await hooks["experimental.compaction.autocontinue"](
         { sessionID: "ses_error" },
@@ -615,6 +622,20 @@ describe("opencode-agents-sync", () => {
       );
       assert.equal(output2.enabled, false);
       assert.equal(mockClient.calls.length, 0);
+
+      await flushTimers(2500);
+    });
+
+    it("should retry the prompt send and succeed on a later attempt", async () => {
+      const mockClient = makeMockClient(false, 2); // fail twice, succeed on 3rd
+      const hooks = await plugin({ client: mockClient });
+
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "ses_retry" },
+        { enabled: true },
+      );
+      await flushTimers(2500);
+      assert.equal(mockClient.calls.length, 1);
     });
 
     describe("multiple sessions", () => {

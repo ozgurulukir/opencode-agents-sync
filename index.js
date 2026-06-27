@@ -36,6 +36,14 @@ const DEFAULT_SECTIONS = [
 // and easy to exercise in tests).
 const DEBUG_LOG_DEFAULT_MAX_BYTES = 1024 * 1024;
 
+// Deferred prompt send tuning. The autocontinue hook runs while the compaction
+// process still holds the session lock, so the prompt must be deferred to avoid
+// a deadlock. If the send still fails (e.g. transient lock contention), retry a
+// few times with backoff instead of dropping the update silently.
+const PROMPT_DEFER_MS = 500;
+const PROMPT_MAX_ATTEMPTS = 3;
+const PROMPT_RETRY_DELAY_MS = 500;
+
 function buildSectionList(sections) {
   return sections.map((s) => `- ${s}`).join("\n");
 }
@@ -251,26 +259,42 @@ const plugin = async (input, rawOptions) => {
 
     setTimeout(async () => {
       const startTime = Date.now();
-      try {
-        log(`Sending deferred AGENTS.md update prompt`);
-        await client.session.prompt({
-          path: { id: sessionID },
-          body: {
-            parts: [{ type: "text", text: promptText }],
-          },
-        });
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        log(`AGENTS.md update completed in ${elapsed}s, clearing active flag`);
-        activeSessions.delete(sessionID);
-      } catch (err) {
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        log(
-          `Failed to send AGENTS.md update after ${elapsed}s: ${err.code || err.message}`,
-        );
-        log(`Stack: ${err.stack || "n/a"}`);
-        activeSessions.delete(sessionID);
+      for (let attempt = 1; attempt <= PROMPT_MAX_ATTEMPTS; attempt++) {
+        try {
+          log(
+            `Sending deferred AGENTS.md update prompt (attempt ${attempt}/${PROMPT_MAX_ATTEMPTS})`,
+          );
+          await client.session.prompt({
+            path: { id: sessionID },
+            body: {
+              parts: [{ type: "text", text: promptText }],
+            },
+          });
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+          log(
+            `AGENTS.md update completed in ${elapsed}s after attempt ${attempt}, clearing active flag`,
+          );
+          activeSessions.delete(sessionID);
+          return;
+        } catch (err) {
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+          log(
+            `Attempt ${attempt}/${PROMPT_MAX_ATTEMPTS} failed after ${elapsed}s: ${err.code || err.message}`,
+          );
+          if (attempt < PROMPT_MAX_ATTEMPTS) {
+            log(`Retrying in ${PROMPT_RETRY_DELAY_MS}ms...`);
+            await new Promise((resolve) =>
+              setTimeout(resolve, PROMPT_RETRY_DELAY_MS),
+            );
+          } else {
+            log(
+              `All ${PROMPT_MAX_ATTEMPTS} attempts failed. Stack: ${err.stack || "n/a"}`,
+            );
+            activeSessions.delete(sessionID);
+          }
+        }
       }
-    }, 500);
+    }, PROMPT_DEFER_MS);
   };
 
   return hooks;

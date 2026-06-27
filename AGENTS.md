@@ -24,8 +24,8 @@ Auto-compaction triggered (context overflow)
   → experimental.compaction.autocontinue fires
   → Plugin tracks session in activeSessions Set (prevent cascade)
   → If continue=false: output.enabled = false (skip default continue)
-  → setTimeout(500ms) defers prompt to avoid deadlock
-  → client.session.prompt() sends update through normal agent loop (with tools)
+  → setTimeout(PROMPT_DEFER_MS) defers prompt to avoid deadlock
+  → client.session.prompt() sends update (retried up to PROMPT_MAX_ATTEMPTS on transient failure)
   → LLM reads AGENTS.md, identifies new info, uses Edit tool to update
   → activeSessions flag cleared after update completes (allows re-trigger)
 ```
@@ -40,7 +40,7 @@ Compaction LLM runs with `tools: {}` — it cannot read or write files. Injectin
 
 **Why `setTimeout` deferral?**
 
-Calling `client.session.prompt()` inside the autocontinue hook creates a deadlock — the compaction process holds the session lock, and the prompt waits for the session to be free. Deferring with `setTimeout(500ms)` lets the hook return first, releasing the lock.
+Calling `client.session.prompt()` inside the autocontinue hook creates a deadlock — the compaction process holds the session lock, and the prompt waits for the session to be free. Deferring with `setTimeout(PROMPT_DEFER_MS)` lets the hook return first, releasing the lock. The send is retried up to `PROMPT_MAX_ATTEMPTS` (with `PROMPT_RETRY_DELAY_MS` backoff) so transient lock contention no longer drops the update.
 
 **Why track `activeSessions`?**
 
@@ -106,7 +106,7 @@ Variables: `{{project_agents_md}}`, `{{global_agents_md}}`
 ## Essential Commands
 
 ```bash
-# Run all tests (41 tests)
+# Run all tests (42 tests)
 node --test 'test/*.test.js'
 
 # Install (symlink + SDK deps)
@@ -134,7 +134,7 @@ Optional peer dependencies (auto-discovered at runtime):
 
 1. **No manual compaction support**: `/compact` runs `auto: false`, so the caller never triggers the autocontinue hook
 2. **Cascade prevention**: `activeSessions` Set blocks concurrent triggers during active update, cleared after completion
-3. **Deadlock avoidance**: `setTimeout(500ms)` required before `client.session.prompt()`
+3. **Deadlock avoidance**: `setTimeout(PROMPT_DEFER_MS=500ms)` required before `client.session.prompt()`; send retried up to 3 attempts on failure
 4. **Plugin must be auto-discovered**: Place symlink in `~/.config/opencode/plugins/`, no config entry needed
 5. **Debug log location**: `~/.local/share/opencode/agents-sync-debug.log` for OpenCode, `~/.local/share/mimocode/agents-sync-debug.log` for MiMo Code. Rotates to `.1` at 1 MiB (tunable via `AGENTS_SYNC_LOG_MAX_BYTES`); silence with `"debug": false`
 6. **Overflow + replay skips update**: on overflow compaction (`overflow: true`) with a replayable prior user message, OpenCode replays instead of firing autocontinue, so the plugin doesn't run that turn
@@ -149,6 +149,6 @@ opencode-agents-sync/
 ├── AGENTS.md         # This file
 ├── install.sh        # Symlink + SDK install script
 ├── test/
-│   └── plugin.test.js # 41 tests (compacting, autocontinue, cascade, prompt file, multi-session, XDG, debug log)
+│   └── plugin.test.js # 42 tests (compacting, autocontinue, cascade, prompt file, multi-session, XDG, debug log, retry)
 └── LICENSE           # MIT License
 ```
