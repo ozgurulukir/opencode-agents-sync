@@ -1,0 +1,2 @@
+# Prettier targets JS/JSON/MD/YAML; shell scripts have no parser.
+*.sh

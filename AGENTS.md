@@ -109,6 +109,10 @@ Variables: `{{project_agents_md}}`, `{{global_agents_md}}`
 # Run all tests (43 tests)
 node --test 'test/*.test.js'
 
+# Check / apply formatting (config: .prettierrc.json)
+npm run format:check
+npm run format
+
 # Install (symlink + SDK deps)
 ./install.sh
 
@@ -119,7 +123,7 @@ tail -f ~/.local/share/mimocode/agents-sync-debug.log   # MiMo Code
 
 ## Code Conventions
 
-- **Indentation**: 2 spaces, no semicolons, double quotes, backticks for templates
+- **Indentation**: 2 spaces, semicolons, double quotes, backticks for templates (enforced via `.prettierrc.json`)
 - **Exports**: `export default plugin` + `export { plugin as server }`
 - **Hook pattern**: async function, guard clause for `enabled`, debug logging
 
@@ -143,12 +147,14 @@ Optional peer dependencies (auto-discovered at runtime):
 
 ```
 opencode-agents-sync/
-├── index.js          # Plugin entry (single file, ~210 lines)
-├── package.json      # NPM package configuration
-├── README.md         # User documentation
-├── AGENTS.md         # This file
-├── install.sh        # Symlink + SDK install script
+├── index.js           # Plugin entry (single file, ~210 lines)
+├── package.json       # NPM package configuration
+├── README.md          # User documentation
+├── AGENTS.md          # This file
+├── .prettierrc.json   # Formatter config (2-space, semi, double quotes)
+├── .prettierignore    # Files excluded from formatting
+├── install.sh         # Symlink + SDK install script
 ├── test/
 │   └── plugin.test.js # 43 tests (compacting, autocontinue, cascade, prompt file, multi-session, XDG, debug log, retry, log dir)
-└── LICENSE           # MIT License
+└── LICENSE            # MIT License
 ```
