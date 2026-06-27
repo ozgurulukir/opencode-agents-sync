@@ -196,9 +196,17 @@ function writeDebugLog(logDir, msg) {
 }
 
 function resolveLogDir(input) {
+  // Deterministic override: both opencode and mimocode typically serve on
+  // "localhost", so the hostname heuristic below is unreliable. Set
+  // AGENTS_SYNC_LOG_DIR to an absolute path to force the log directory
+  // regardless of which host app loaded the plugin.
+  const envDir = process.env.AGENTS_SYNC_LOG_DIR;
+  if (envDir && isAbsolute(envDir)) {
+    return envDir;
+  }
   const home = process.env.HOME || "/tmp";
-  const host = input.serverUrl?.hostname || "";
-  if (host.includes("mimocode")) {
+  // Best-effort: detect mimocode by its server URL hostname.
+  if (input.serverUrl?.hostname.includes("mimocode")) {
     return join(home, ".local", "share", "mimocode");
   }
   return join(home, ".local", "share", "opencode");

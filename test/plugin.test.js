@@ -189,6 +189,28 @@ describe("opencode-agents-sync", () => {
       );
       assert.ok(existsSync(logFile));
     });
+
+    it("should honor AGENTS_SYNC_LOG_DIR override over the hostname heuristic", async () => {
+      const tmpLogDir = join(tmpdir(), `agents-sync-env-${Date.now()}`);
+      mkdirSync(tmpLogDir, { recursive: true });
+      const oldEnv = process.env.AGENTS_SYNC_LOG_DIR;
+      process.env.AGENTS_SYNC_LOG_DIR = tmpLogDir;
+      try {
+        // A plain localhost URL would normally resolve to the opencode dir.
+        await plugin({
+          client: makeMockClient(),
+          serverUrl: new URL("http://localhost:3000"),
+        });
+        assert.ok(
+          existsSync(join(tmpLogDir, "agents-sync-debug.log")),
+          "expected log in AGENTS_SYNC_LOG_DIR override",
+        );
+      } finally {
+        if (oldEnv === undefined) delete process.env.AGENTS_SYNC_LOG_DIR;
+        else process.env.AGENTS_SYNC_LOG_DIR = oldEnv;
+        rmSync(tmpLogDir, { recursive: true, force: true });
+      }
+    });
   });
 
   describe("debug log", () => {

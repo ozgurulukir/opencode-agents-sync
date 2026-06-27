@@ -106,7 +106,7 @@ Variables: `{{project_agents_md}}`, `{{global_agents_md}}`
 ## Essential Commands
 
 ```bash
-# Run all tests (42 tests)
+# Run all tests (43 tests)
 node --test 'test/*.test.js'
 
 # Install (symlink + SDK deps)
@@ -136,7 +136,7 @@ Optional peer dependencies (auto-discovered at runtime):
 2. **Cascade prevention**: `activeSessions` Set blocks concurrent triggers during active update, cleared after completion
 3. **Deadlock avoidance**: `setTimeout(PROMPT_DEFER_MS=500ms)` required before `client.session.prompt()`; send retried up to 3 attempts on failure
 4. **Plugin must be auto-discovered**: Place symlink in `~/.config/opencode/plugins/`, no config entry needed
-5. **Debug log location**: `~/.local/share/opencode/agents-sync-debug.log` for OpenCode, `~/.local/share/mimocode/agents-sync-debug.log` for MiMo Code. Rotates to `.1` at 1 MiB (tunable via `AGENTS_SYNC_LOG_MAX_BYTES`); silence with `"debug": false`
+5. **Debug log location**: `~/.local/share/opencode/agents-sync-debug.log` for OpenCode, `~/.local/share/mimocode/agents-sync-debug.log` for MiMo Code. Host detection is best-effort (both apps serve on `localhost`); force the dir with `AGENTS_SYNC_LOG_DIR`. Rotates to `.1` at 1 MiB (tunable via `AGENTS_SYNC_LOG_MAX_BYTES`); silence with `"debug": false`
 6. **Overflow + replay skips update**: on overflow compaction (`overflow: true`) with a replayable prior user message, OpenCode replays instead of firing autocontinue, so the plugin doesn't run that turn
 
 ## Project Structure
@@ -149,6 +149,6 @@ opencode-agents-sync/
 ├── AGENTS.md         # This file
 ├── install.sh        # Symlink + SDK install script
 ├── test/
-│   └── plugin.test.js # 42 tests (compacting, autocontinue, cascade, prompt file, multi-session, XDG, debug log, retry)
+│   └── plugin.test.js # 43 tests (compacting, autocontinue, cascade, prompt file, multi-session, XDG, debug log, retry, log dir)
 └── LICENSE           # MIT License
 ```
