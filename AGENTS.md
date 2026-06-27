@@ -30,6 +30,8 @@ Auto-compaction triggered (context overflow)
   → activeSessions flag cleared after update completes (allows re-trigger)
 ```
 
+> **Note**: On overflow compaction (`overflow: true`) with a replayable prior user message, OpenCode replays that message instead of firing `experimental.compaction.autocontinue`, so the steps below "autocontinue fires" are skipped for that turn.
+
 ### Key Design Decisions
 
 **Why `client.session.prompt()` instead of injecting into compaction prompt?**
@@ -47,6 +49,10 @@ Without tracking, a cascade can occur: the update prompt adds to context → tri
 **Why only auto-compaction (not manual `/compact`)?**
 
 OpenCode gates the trigger in the caller (`packages/opencode/src/session/compaction.ts`: `if (result === "continue" && input.auto)`), not in the hook. The hook input is `{ sessionID, agent, model, provider, message, overflow }` — it has **no `auto` field**. Manual `/compact` runs with `auto: false`, so the caller skips the trigger entirely and the hook never fires. This is an OpenCode SDK limitation.
+
+**Overflow with replay skips the hook**
+
+When compaction is triggered by context overflow (`overflow: true`) and a replayable prior user message exists, OpenCode replays that message instead of calling `experimental.compaction.autocontinue`. In that case this plugin's hook never fires, so no AGENTS.md update happens for that compaction turn. The update resumes on the next regular auto-compaction. This is expected OpenCode behavior, not a plugin bug.
 
 **Scope: project-level only**
 
@@ -130,6 +136,7 @@ Optional peer dependencies (auto-discovered at runtime):
 3. **Deadlock avoidance**: `setTimeout(500ms)` required before `client.session.prompt()`
 4. **Plugin must be auto-discovered**: Place symlink in `~/.config/opencode/plugins/`, no config entry needed
 5. **Debug log location**: `~/.local/share/opencode/agents-sync-debug.log` for OpenCode, `~/.local/share/mimocode/agents-sync-debug.log` for MiMo Code
+6. **Overflow + replay skips update**: on overflow compaction (`overflow: true`) with a replayable prior user message, OpenCode replays instead of firing autocontinue, so the plugin doesn't run that turn
 
 ## Project Structure
 

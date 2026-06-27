@@ -38,6 +38,8 @@ Only project-level AGENTS.md is updated. Global/user-level AGENTS.md (`~/.config
 
 > **Note**: The quality of AGENTS.md updates depends on the model you use. Stronger models produce better consolidations. The update prompt appears as a visible user message in the conversation — this is expected behavior.
 
+> **Note**: The plugin runs only on auto-compaction, never on manual `/compact`. Additionally, when a compaction is triggered by context overflow and a prior message can be replayed, OpenCode replays it instead of firing the hook, so no update happens for that turn — the next regular auto-compaction resumes updates.
+
 > **Troubleshooting**: If the plugin doesn't seem to work, check the debug log. For OpenCode: `~/.local/share/opencode/agents-sync-debug.log`. For MiMo Code: `~/.local/share/mimocode/agents-sync-debug.log`. Look for "Autocontinue fired" entries.
 
 ## Installation
