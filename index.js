@@ -320,4 +320,5 @@ const plugin = async (input, rawOptions) => {
   return hooks;
 };
 
-export default { server: plugin };
+export default { id: "opencode-agents-sync", server: plugin };
+

@@ -55,6 +55,14 @@ describe("opencode-agents-sync", () => {
     _setPromptTimers(500, 500, 3);
     _flushDelay = 1000;
   });
+  it("should export a valid PluginModule with id and server", () => {
+    assert.equal(typeof pluginObj, "object");
+    assert.equal(typeof pluginObj.id, "string");
+    assert.ok(pluginObj.id.length > 0, "id must be a non-empty string");
+    assert.equal(typeof pluginObj.server, "function");
+    assert.equal(pluginObj.tui, undefined);
+  });
+
   it("should export a server function", () => {
     assert.equal(typeof plugin, "function");
   });
