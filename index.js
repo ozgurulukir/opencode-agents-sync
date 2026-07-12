@@ -192,11 +192,16 @@ function rotateDebugLogIfNeeded(logPath) {
   }
 }
 
+const ensuredLogDirs = new Set();
+
 function writeDebugLog(logDir, msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
   const logPath = join(logDir, "agents-sync-debug.log");
   try {
-    mkdirSync(logDir, { recursive: true });
+    if (!ensuredLogDirs.has(logDir)) {
+      mkdirSync(logDir, { recursive: true });
+      ensuredLogDirs.add(logDir);
+    }
     rotateDebugLogIfNeeded(logPath);
     appendFileSync(logPath, line);
   } catch (err) {
@@ -321,4 +326,3 @@ const plugin = async (input, rawOptions) => {
 };
 
 export default { id: "opencode-agents-sync", server: plugin };
-
