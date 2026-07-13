@@ -204,18 +204,27 @@ function logMaxBytes() {
   return Number.isFinite(n) && n > 0 ? n : DEBUG_LOG_DEFAULT_MAX_BYTES;
 }
 
-function rotateDebugLogIfNeeded(logPath) {
-  let size;
-  try {
-    size = statSync(logPath).size;
-  } catch (err) {
-    if (err.code !== "ENOENT") throw err;
-    return; // No log file yet — nothing to rotate.
+// Cache log sizes to avoid synchronous statSync on every log write
+const logSizes = new Map();
+
+function rotateDebugLogIfNeeded(logPath, lineLength) {
+  let size = logSizes.get(logPath);
+  if (size === undefined) {
+    try {
+      size = statSync(logPath).size;
+    } catch (err) {
+      if (err.code !== "ENOENT") throw err;
+      size = 0; // No log file yet
+    }
   }
+
   if (size > logMaxBytes()) {
     // Keep one backup so recent history survives an overflow instead of being
     // truncated. renameSync overwrites any previous `.1`.
     renameSync(logPath, `${logPath}.1`);
+    logSizes.set(logPath, lineLength);
+  } else {
+    logSizes.set(logPath, size + lineLength);
   }
 }
 
@@ -229,7 +238,8 @@ function writeDebugLog(logDir, msg) {
       mkdirSync(logDir, { recursive: true });
       ensuredLogDirs.add(logDir);
     }
-    rotateDebugLogIfNeeded(logPath);
+    // Performance optimization: pass byte length to avoid statSync inside rotate
+    rotateDebugLogIfNeeded(logPath, Buffer.byteLength(line, "utf8"));
     appendFileSync(logPath, line);
   } catch (err) {
     console.error(
