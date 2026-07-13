@@ -309,7 +309,15 @@ const plugin = async (input, rawOptions) => {
       `Deferring AGENTS.md update prompt (${promptText.length} chars, source=${promptFile || "built-in"})`,
     );
 
-    setTimeout(async () => {
+    const scheduleUpdate = (fn) => {
+      if (PROMPT_DEFER_MS > 0) {
+        setTimeout(fn, PROMPT_DEFER_MS);
+      } else {
+        setImmediate(fn);
+      }
+    };
+
+    scheduleUpdate(async () => {
       const startTime = Date.now();
       for (let attempt = 1; attempt <= PROMPT_MAX_ATTEMPTS; attempt++) {
         try {
@@ -334,10 +342,12 @@ const plugin = async (input, rawOptions) => {
             `Attempt ${attempt}/${PROMPT_MAX_ATTEMPTS} failed after ${elapsed}s: ${err.code || err.message}`,
           );
           if (attempt < PROMPT_MAX_ATTEMPTS) {
-            log(`Retrying in ${PROMPT_RETRY_DELAY_MS}ms...`);
-            await new Promise((resolve) =>
-              setTimeout(resolve, PROMPT_RETRY_DELAY_MS),
-            );
+            if (PROMPT_RETRY_DELAY_MS > 0) {
+              log(`Retrying in ${PROMPT_RETRY_DELAY_MS}ms...`);
+              await new Promise((resolve) =>
+                setTimeout(resolve, PROMPT_RETRY_DELAY_MS),
+              );
+            }
           } else {
             log(
               `All ${PROMPT_MAX_ATTEMPTS} attempts failed. Stack: ${err.stack || "n/a"}`,
@@ -346,7 +356,7 @@ const plugin = async (input, rawOptions) => {
           }
         }
       }
-    }, PROMPT_DEFER_MS);
+    });
   };
 
   return hooks;

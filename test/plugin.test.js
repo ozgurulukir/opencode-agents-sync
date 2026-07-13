@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { tmpdir } from "node:os";
 
 const { default: pluginObj, _setPromptTimers } = await import("../index.js");
@@ -44,10 +44,11 @@ const DEFAULT_SECTIONS = [
 
 describe("opencode-agents-sync", () => {
   beforeEach(async () => {
-    // Fast mode: skip production delays; 10ms flush is enough for event loop
-    // to process all pending setTimeout(0) callbacks deterministically.
+    // Fast mode: skip production delays; 50ms flush is enough for event loop
+    // to process all pending setTimeout(0) callbacks deterministically
+    // (Windows has ~15.6ms minimum timer resolution).
     _setPromptTimers(0, 0, 3);
-    _flushDelay = 10;
+    _flushDelay = 50;
   });
 
   afterEach(() => {
@@ -559,7 +560,7 @@ describe("opencode-agents-sync", () => {
       const text = mockClient.calls[0].body.parts[0].text;
       assert.ok(text.includes("AGENTS.md"));
       assert.ok(text.includes("Target sections"));
-      assert.ok(text.includes("/home/user/project/AGENTS.md"));
+      assert.ok(text.includes(join("/home/user/project", "AGENTS.md")));
       assert.ok(text.includes("~/.config/opencode/AGENTS.md"));
       assert.ok(text.includes("Exclusions"));
       assert.ok(text.includes("skill"));
