@@ -140,6 +140,10 @@ function loadPromptFile(promptFile, projectRoot, log) {
 
     // Security: Check file size to prevent OOM / DoS (max 1MB)
     const stats = statSync(promptFile);
+    if (!stats.isFile()) {
+      log(`Prompt file is not a regular file, ignoring: ${promptFile}`);
+      return null;
+    }
     if (stats.size > 1024 * 1024) {
       log(
         `Prompt file too large (${stats.size} bytes), ignoring: ${promptFile}`,

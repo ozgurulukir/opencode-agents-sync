@@ -407,6 +407,23 @@ describe("opencode-agents-sync", () => {
       // Should fall back to built-in prompt because the file was rejected
       assert.ok(text.includes("Target sections to update:"));
     });
+
+    it("should return null for non-regular files to prevent DoS", async () => {
+      const mockClient = makeMockClient();
+
+      const hooks = await plugin(
+        { client: mockClient, directory: tmpDir },
+        { promptFile: "/dev/zero" },
+      );
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "test" },
+        { enabled: true },
+      );
+      await flushTimers();
+      const text = mockClient.calls[0].body.parts[0].text;
+      // Should fall back to built-in prompt because the file was rejected
+      assert.ok(text.includes("Target sections to update:"));
+    });
   });
 
   describe("resolvePromptFile priority", () => {
