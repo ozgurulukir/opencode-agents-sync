@@ -3,10 +3,11 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   statSync,
 } from "node:fs";
-import { isAbsolute, join, dirname } from "node:path";
+import { isAbsolute, join, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PLUGIN_VERSION = (() => {
@@ -136,6 +137,16 @@ function loadPromptFile(promptFile, projectRoot, log) {
       log(`Prompt file not found: ${promptFile}`);
       return null;
     }
+
+    // Security: Check file size to prevent OOM / DoS (max 1MB)
+    const stats = statSync(promptFile);
+    if (stats.size > 1024 * 1024) {
+      log(
+        `Prompt file too large (${stats.size} bytes), ignoring: ${promptFile}`,
+      );
+      return null;
+    }
+
     let content = readFileSync(promptFile, "utf-8").trim();
     const globalAgentsMd = join(resolveGlobalConfigDir(), "AGENTS.md");
     const projectAgentsMd = projectRoot
@@ -160,8 +171,24 @@ function resolvePromptFile(options, projectRoot, log) {
     ? join(projectRoot, ".opencode", "agents-sync-prompt.md")
     : null;
   if (projectPrompt && existsSync(projectPrompt)) {
-    log(`Found project-level prompt: ${projectPrompt}`);
-    return projectPrompt;
+    try {
+      // Security: Ensure project prompt doesn't escape project root via symlink
+      const realPromptPath = realpathSync(projectPrompt);
+      const realProjectRoot = realpathSync(projectRoot);
+      if (
+        !realPromptPath.startsWith(realProjectRoot + sep) &&
+        realPromptPath !== realProjectRoot
+      ) {
+        log(
+          `Security warning: project prompt file escapes project directory, ignoring: ${projectPrompt}`,
+        );
+      } else {
+        log(`Found project-level prompt: ${projectPrompt}`);
+        return projectPrompt;
+      }
+    } catch (err) {
+      // Ignore if realpath fails
+    }
   }
   const globalPrompt = join(resolveGlobalConfigDir(), "agents-sync-prompt.md");
   if (existsSync(globalPrompt)) {

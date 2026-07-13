@@ -385,6 +385,27 @@ describe("opencode-agents-sync", () => {
       assert.ok(text.includes(".config"));
       assert.ok(!text.includes("{{"));
     });
+
+    it("should return null for prompt files larger than 1MB", async () => {
+      const mockClient = makeMockClient();
+
+      const largeFile = join(tmpDir, "large-prompt.md");
+      const buffer = Buffer.alloc(1024 * 1024 + 1, "a");
+      writeFileSync(largeFile, buffer);
+
+      const hooks = await plugin(
+        { client: mockClient, directory: tmpDir },
+        { promptFile: largeFile },
+      );
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "test" },
+        { enabled: true },
+      );
+      await flushTimers();
+      const text = mockClient.calls[0].body.parts[0].text;
+      // Should fall back to built-in prompt because the file was rejected
+      assert.ok(text.includes("Target sections to update:"));
+    });
   });
 
   describe("resolvePromptFile priority", () => {
