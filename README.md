@@ -48,9 +48,19 @@ Plugins are loaded as flat `.js` files from the `plugins/` directory. Subdirecto
 
 ### Quick install
 
+#### Linux / macOS / Git Bash / WSL
+
 ```bash
 ./install.sh
 ```
+
+#### Windows (PowerShell 7+)
+
+```powershell
+.\install.ps1
+```
+
+> **Note:** The PowerShell script attempts to create a symbolic link. If that fails (requires admin or Developer Mode), it falls back to copying the file. To enable symlinks without admin: **Settings > For Developers > Developer Mode > ON**, or run PowerShell as Administrator.
 
 ### Manual install
 

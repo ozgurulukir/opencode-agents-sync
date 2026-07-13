@@ -24,7 +24,7 @@ Auto-compaction triggered (context overflow)
   → experimental.compaction.autocontinue fires
   → Plugin tracks session in activeSessions Set (prevent cascade)
   → If continue=false: output.enabled = false (skip default continue)
-  → setTimeout(PROMPT_DEFER_MS) defers prompt to avoid deadlock
+  → setTimeout/setImmediate(PROMPT_DEFER_MS) defers prompt to avoid deadlock
   → client.session.prompt() sends update (retried up to PROMPT_MAX_ATTEMPTS on transient failure)
   → LLM reads AGENTS.md, identifies new info, uses Edit tool to update
   → activeSessions flag cleared after update completes (allows re-trigger)
@@ -106,15 +106,18 @@ Variables: `{{project_agents_md}}`, `{{global_agents_md}}`
 ## Essential Commands
 
 ```bash
-# Run all tests (43 tests)
+# Run all tests (45 tests)
 node --test 'test/*.test.js'
 
 # Check / apply formatting (config: .prettierrc.json)
 npm run format:check
 npm run format
 
-# Install (symlink + SDK deps)
+# Install (symlink + SDK deps) — Linux / macOS / Git Bash / WSL
 ./install.sh
+
+# Install (symlink + SDK deps) — Windows PowerShell 7+
+./install.ps1
 
 # Debug log
 tail -f ~/.local/share/opencode/agents-sync-debug.log   # OpenCode
@@ -138,7 +141,7 @@ Optional peer dependencies (auto-discovered at runtime):
 
 1. **No manual compaction support**: `/compact` runs `auto: false`, so the caller never triggers the autocontinue hook
 2. **Cascade prevention**: `activeSessions` Set blocks concurrent triggers during active update, cleared after completion
-3. **Deadlock avoidance**: `setTimeout(PROMPT_DEFER_MS=500ms)` required before `client.session.prompt()`; send retried up to 3 attempts on failure
+3. **Deadlock avoidance**: `setTimeout(PROMPT_DEFER_MS=500ms)` (or `setImmediate` when defer is 0) required before `client.session.prompt()`; send retried up to 3 attempts on failure
 4. **Plugin must be auto-discovered**: Place symlink in `~/.config/opencode/plugins/`, no config entry needed
 5. **Debug log location**: `~/.local/share/opencode/agents-sync-debug.log` for OpenCode, `~/.local/share/mimocode/agents-sync-debug.log` for MiMo Code. Host detection is best-effort (both apps serve on `localhost`); force the dir with `AGENTS_SYNC_LOG_DIR`. Rotates to `.1` at 1 MiB (tunable via `AGENTS_SYNC_LOG_MAX_BYTES`); silence with `"debug": false`
 6. **Overflow + replay skips update**: on overflow compaction (`overflow: true`) with a replayable prior user message, OpenCode replays instead of firing autocontinue, so the plugin doesn't run that turn
@@ -147,14 +150,15 @@ Optional peer dependencies (auto-discovered at runtime):
 
 ```
 opencode-agents-sync/
-├── index.js           # Plugin entry (single file, ~320 lines)
+├── index.js           # Plugin entry (single file, ~365 lines)
 ├── package.json       # NPM package configuration
 ├── README.md          # User documentation
 ├── AGENTS.md          # This file
 ├── .prettierrc.json   # Formatter config (2-space, semi, double quotes)
 ├── .prettierignore    # Files excluded from formatting
-├── install.sh         # Symlink + SDK install script
+├── install.sh         # Symlink + SDK install script (Linux/macOS/Git Bash/WSL)
+├── install.ps1        # Symlink + SDK install script (Windows PowerShell 7+)
 ├── test/
-│   └── plugin.test.js # 43 tests (compacting, autocontinue, cascade, prompt file, multi-session, XDG, debug log, retry, log dir)
+│   └── plugin.test.js # 45 tests (compacting, autocontinue, cascade, prompt file, multi-session, XDG, debug log, retry, log dir, security)
 └── LICENSE            # MIT License
 ```
