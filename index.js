@@ -45,6 +45,10 @@ let PROMPT_DEFER_MS = 500;
 let PROMPT_MAX_ATTEMPTS = 3;
 let PROMPT_RETRY_DELAY_MS = 500;
 
+// Module-level mutable state for log rotation tracking. Cleared by
+// _resetLogSizes() between tests to avoid cross-test pollution.
+const logSizes = new Map();
+
 // Test-only override to speed up execution (skip delays by setting all to 0).
 // Tests should call _setPromptTimers(0, 0, 0) to bypass all waits and run instantly.
 export function _setPromptTimers(
@@ -55,6 +59,11 @@ export function _setPromptTimers(
   if (deferMs !== null) PROMPT_DEFER_MS = deferMs;
   if (retryDelayMs !== null) PROMPT_RETRY_DELAY_MS = retryDelayMs;
   if (maxAttempts !== null) PROMPT_MAX_ATTEMPTS = maxAttempts;
+}
+
+// Test-only helper to reset log rotation tracking between tests.
+export function _resetLogSizes() {
+  logSizes.clear();
 }
 
 function buildSectionList(sections) {
@@ -138,8 +147,14 @@ function loadPromptFile(promptFile, projectRoot, log) {
       return null;
     }
 
-    // Security: Check file size to prevent OOM / DoS (max 1MB)
+    // Security: Cheap guard first — reject non-regular files (directories, devices, etc.)
     const stats = statSync(promptFile);
+    if (!stats.isFile()) {
+      log(`Prompt file is not a regular file, ignoring: ${promptFile}`);
+      return null;
+    }
+
+    // Security: Check file size to prevent OOM / DoS (max 1MB)
     if (stats.size > 1024 * 1024) {
       log(
         `Prompt file too large (${stats.size} bytes), ignoring: ${promptFile}`,
@@ -204,18 +219,23 @@ function logMaxBytes() {
   return Number.isFinite(n) && n > 0 ? n : DEBUG_LOG_DEFAULT_MAX_BYTES;
 }
 
-function rotateDebugLogIfNeeded(logPath) {
-  let size;
-  try {
-    size = statSync(logPath).size;
-  } catch (err) {
-    if (err.code !== "ENOENT") throw err;
-    return; // No log file yet — nothing to rotate.
+function rotateDebugLogIfNeeded(logPath, lineLength) {
+  let size = logSizes.get(logPath);
+  if (size === undefined) {
+    try {
+      size = statSync(logPath).size;
+    } catch (err) {
+      if (err.code !== "ENOENT") throw err;
+      size = 0; // No log file yet
+    }
   }
   if (size > logMaxBytes()) {
     // Keep one backup so recent history survives an overflow instead of being
     // truncated. renameSync overwrites any previous `.1`.
     renameSync(logPath, `${logPath}.1`);
+    logSizes.set(logPath, lineLength);
+  } else {
+    logSizes.set(logPath, size + lineLength);
   }
 }
 
@@ -229,7 +249,8 @@ function writeDebugLog(logDir, msg) {
       mkdirSync(logDir, { recursive: true });
       ensuredLogDirs.add(logDir);
     }
-    rotateDebugLogIfNeeded(logPath);
+    // Performance: pass byte length to avoid statSync inside rotate
+    rotateDebugLogIfNeeded(logPath, Buffer.byteLength(line, "utf8"));
     appendFileSync(logPath, line);
   } catch (err) {
     console.error(

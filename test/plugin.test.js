@@ -4,7 +4,9 @@ import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
 import { join, sep } from "node:path";
 import { tmpdir } from "node:os";
 
-const { default: pluginObj, _setPromptTimers } = await import("../index.js");
+const { default: pluginObj, _setPromptTimers, _resetLogSizes } = await import(
+  "../index.js",
+);
 const plugin = pluginObj.server;
 
 function makeMockClient(errorOnPrompt = false, failTimes = 0) {
@@ -55,6 +57,7 @@ describe("opencode-agents-sync", () => {
     // Restore production timing defaults after each test.
     _setPromptTimers(500, 500, 3);
     _flushDelay = 1000;
+    _resetLogSizes();
   });
   it("should export a valid PluginModule with id and server", () => {
     assert.equal(typeof pluginObj, "object");
@@ -405,6 +408,23 @@ describe("opencode-agents-sync", () => {
       await flushTimers();
       const text = mockClient.calls[0].body.parts[0].text;
       // Should fall back to built-in prompt because the file was rejected
+      assert.ok(text.includes("Target sections to update:"));
+    });
+
+    it("should return null for non-regular files to prevent DoS", async () => {
+      // tmpDir is a directory, not a regular file — isFile() returns false
+      const mockClient = makeMockClient();
+      const hooks = await plugin(
+        { client: mockClient, directory: tmpDir },
+        { promptFile: tmpDir },
+      );
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "test" },
+        { enabled: true },
+      );
+      await flushTimers();
+      const text = mockClient.calls[0].body.parts[0].text;
+      // Should fall back to built-in prompt because the directory was rejected
       assert.ok(text.includes("Target sections to update:"));
     });
   });
