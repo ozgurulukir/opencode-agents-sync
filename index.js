@@ -145,11 +145,6 @@ function parseOptions(raw) {
 function loadPromptFile(promptFile, projectRoot, log) {
   if (!promptFile) return null;
   try {
-    if (!existsSync(promptFile)) {
-      log(`Prompt file not found: ${promptFile}`);
-      return null;
-    }
-
     let fd;
     try {
       fd = openSync(promptFile, "r");
@@ -233,12 +228,10 @@ function logMaxBytes() {
 function rotateDebugLogIfNeeded(logPath, lineLength) {
   let size = logSizes.get(logPath);
   if (size === undefined) {
-    try {
-      size = statSync(logPath).size;
-    } catch (err) {
-      if (err.code !== "ENOENT") throw err;
-      size = 0; // No log file yet
-    }
+    // Performance: Avoid try/catch overhead for ENOENT when the file doesn't exist yet.
+    // statSync with throwIfNoEntry is significantly faster.
+    const stats = statSync(logPath, { throwIfNoEntry: false });
+    size = stats ? stats.size : 0;
   }
   if (size > logMaxBytes()) {
     // Keep one backup so recent history survives an overflow instead of being
