@@ -6,6 +6,9 @@ import {
   realpathSync,
   renameSync,
   statSync,
+  openSync,
+  fstatSync,
+  closeSync,
 } from "node:fs";
 import { isAbsolute, join, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -147,30 +150,38 @@ function loadPromptFile(promptFile, projectRoot, log) {
       return null;
     }
 
-    // Security: Cheap guard first — reject non-regular files (directories, devices, etc.)
-    const stats = statSync(promptFile);
-    if (!stats.isFile()) {
-      log(`Prompt file is not a regular file, ignoring: ${promptFile}`);
-      return null;
-    }
+    let fd;
+    try {
+      fd = openSync(promptFile, "r");
+      // Security: Cheap guard first — reject non-regular files (directories, devices, etc.)
+      const stats = fstatSync(fd);
+      if (!stats.isFile()) {
+        log(`Prompt file is not a regular file, ignoring: ${promptFile}`);
+        return null;
+      }
 
-    // Security: Check file size to prevent OOM / DoS (max 1MB)
-    if (stats.size > 1024 * 1024) {
-      log(
-        `Prompt file too large (${stats.size} bytes), ignoring: ${promptFile}`,
-      );
-      return null;
-    }
+      // Security: Check file size to prevent OOM / DoS (max 1MB)
+      if (stats.size > 1024 * 1024) {
+        log(
+          `Prompt file too large (${stats.size} bytes), ignoring: ${promptFile}`,
+        );
+        return null;
+      }
 
-    let content = readFileSync(promptFile, "utf-8").trim();
-    const globalAgentsMd = join(resolveGlobalConfigDir(), "AGENTS.md");
-    const projectAgentsMd = projectRoot
-      ? join(projectRoot, "AGENTS.md")
-      : "AGENTS.md";
-    content = content.replaceAll("{{project_agents_md}}", projectAgentsMd);
-    content = content.replaceAll("{{global_agents_md}}", globalAgentsMd);
-    log(`Loaded prompt file: ${promptFile} (${content.length} chars)`);
-    return content;
+      let content = readFileSync(fd, "utf-8").trim();
+      const globalAgentsMd = join(resolveGlobalConfigDir(), "AGENTS.md");
+      const projectAgentsMd = projectRoot
+        ? join(projectRoot, "AGENTS.md")
+        : "AGENTS.md";
+      content = content.replaceAll("{{project_agents_md}}", projectAgentsMd);
+      content = content.replaceAll("{{global_agents_md}}", globalAgentsMd);
+      log(`Loaded prompt file: ${promptFile} (${content.length} chars)`);
+      return content;
+    } finally {
+      if (fd !== undefined) {
+        closeSync(fd);
+      }
+    }
   } catch (err) {
     log(`Failed to load prompt file ${promptFile}: ${err.code || err.message}`);
     return null;

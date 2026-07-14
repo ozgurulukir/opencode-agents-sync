@@ -4,9 +4,11 @@ import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
 import { join, sep } from "node:path";
 import { tmpdir } from "node:os";
 
-const { default: pluginObj, _setPromptTimers, _resetLogSizes } = await import(
-  "../index.js",
-);
+const {
+  default: pluginObj,
+  _setPromptTimers,
+  _resetLogSizes,
+} = await import("../index.js");
 const plugin = pluginObj.server;
 
 function makeMockClient(errorOnPrompt = false, failTimes = 0) {
