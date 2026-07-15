@@ -460,7 +460,7 @@ describe("opencode-agents-sync", () => {
       const mockClient = makeMockClient();
       const hooks = await plugin(
         { client: mockClient, directory: tmpDir },
-        { promptFile: configFile },
+        { promptFile: configFile, allowProjectPrompt: true },
       );
       await hooks["experimental.compaction.autocontinue"](
         { sessionID: "test" },
@@ -795,10 +795,13 @@ describe("opencode-agents-sync", () => {
           "Custom project prompt for {{project_agents_md}}",
         );
         const mockClient = makeMockClient();
-        const hooks = await plugin({
-          client: mockClient,
-          directory: tmpDir,
-        });
+        const hooks = await plugin(
+          {
+            client: mockClient,
+            directory: tmpDir,
+          },
+          { allowProjectPrompt: true },
+        );
         await hooks["experimental.compaction.autocontinue"](
           { sessionID: "test" },
           { enabled: true },
@@ -817,10 +820,13 @@ describe("opencode-agents-sync", () => {
           "Check {{project_agents_md}} against {{global_agents_md}}",
         );
         const mockClient = makeMockClient();
-        const hooks = await plugin({
-          client: mockClient,
-          directory: tmpDir,
-        });
+        const hooks = await plugin(
+          {
+            client: mockClient,
+            directory: tmpDir,
+          },
+          { allowProjectPrompt: true },
+        );
         await hooks["experimental.compaction.autocontinue"](
           { sessionID: "test" },
           { enabled: true },
@@ -833,10 +839,13 @@ describe("opencode-agents-sync", () => {
 
       it("should fall back to built-in when no prompt file exists", async () => {
         const mockClient = makeMockClient();
-        const hooks = await plugin({
-          client: mockClient,
-          directory: tmpDir,
-        });
+        const hooks = await plugin(
+          {
+            client: mockClient,
+            directory: tmpDir,
+          },
+          { allowProjectPrompt: true },
+        );
         await hooks["experimental.compaction.autocontinue"](
           { sessionID: "test" },
           { enabled: true },
@@ -864,6 +873,25 @@ describe("opencode-agents-sync", () => {
         await flushTimers();
         const text = mockClient.calls[0].body.parts[0].text;
         assert.equal(text, "Absolute path prompt");
+      });
+
+      it("should ignore project-level prompt file by default for security", async () => {
+        writeFileSync(
+          join(tmpDir, ".opencode", "agents-sync-prompt.md"),
+          "Custom project prompt for {{project_agents_md}}",
+        );
+        const mockClient = makeMockClient();
+        const hooks = await plugin({
+          client: mockClient,
+          directory: tmpDir,
+        });
+        await hooks["experimental.compaction.autocontinue"](
+          { sessionID: "test" },
+          { enabled: true },
+        );
+        await flushTimers();
+        const text = mockClient.calls[0].body.parts[0].text;
+        assert.ok(text.includes("PROJECT-LEVEL"));
       });
     });
   });

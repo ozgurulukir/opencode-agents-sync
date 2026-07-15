@@ -108,22 +108,25 @@ To pass options, reference the local file path relative to the config directory:
 
 ### Options
 
-| Option       | Type       | Default        | Description                                  |
-| ------------ | ---------- | -------------- | -------------------------------------------- |
-| `enabled`    | `boolean`  | `true`         | Enable/disable the plugin                    |
-| `continue`   | `boolean`  | `false`        | Also send default "Continue..." after update |
-| `debug`      | `boolean`  | `true`         | Write the debug log (set `false` to silence) |
-| `sections`   | `string[]` | All 8 sections | Which sections to target                     |
-| `promptFile` | `string`   | `null`         | Absolute path to custom prompt template file |
-| `template`   | `string`   | `null`         | Raw compaction prompt replacement (advanced) |
+| Option               | Type       | Default        | Description                                     |
+| -------------------- | ---------- | -------------- | ----------------------------------------------- |
+| `enabled`            | `boolean`  | `true`         | Enable/disable the plugin                       |
+| `continue`           | `boolean`  | `false`        | Also send default "Continue..." after update    |
+| `debug`              | `boolean`  | `true`         | Write the debug log (set `false` to silence)    |
+| `sections`           | `string[]` | All 8 sections | Which sections to target                        |
+| `promptFile`         | `string`   | `null`         | Absolute path to custom prompt template file    |
+| `allowProjectPrompt` | `boolean`  | `false`        | Load project-level template (see security note) |
+| `template`           | `string`   | `null`         | Raw compaction prompt replacement (advanced)    |
 
 ### Custom Prompt Template
 
 You can override the built-in update prompt by placing a `agents-sync-prompt.md` file in one of these locations (checked in order):
 
 1. **Config option**: `"promptFile": "/absolute/path/to/template.md"` — highest priority
-2. **Project level**: `<project>/.opencode/agents-sync-prompt.md`
+2. **Project level**: `<project>/.opencode/agents-sync-prompt.md` (Requires `"allowProjectPrompt": true`)
 3. **Global level**: `$XDG_CONFIG_HOME/opencode/agents-sync-prompt.md` (or `~/.config/opencode/agents-sync-prompt.md` if `XDG_CONFIG_HOME` is unset)
+
+> **Security Note:** Loading a project-level prompt file executes untrusted text in the agent loop. If a downloaded repository contains a malicious `.opencode/agents-sync-prompt.md`, it could result in a prompt injection vulnerability. For this reason, project-level prompts are disabled by default and require the `allowProjectPrompt` configuration flag to be set explicitly.
 
 The file is read on each compaction — no plugin restart needed. Changes take effect on the next auto-compaction.
 
