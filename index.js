@@ -69,6 +69,12 @@ export function _resetLogSizes() {
   logSizes.clear();
 }
 
+// Test-only helper to reset the logMaxBytes cache between tests.
+export function _resetLogMaxBytesCache() {
+  cachedLogMaxBytesEnv = undefined;
+  cachedLogMaxBytesNum = DEBUG_LOG_DEFAULT_MAX_BYTES;
+}
+
 function buildSectionList(sections) {
   return sections.map((s) => `- ${s}`).join("\n");
 }
