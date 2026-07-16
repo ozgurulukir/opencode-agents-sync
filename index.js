@@ -127,6 +127,7 @@ function parseOptions(raw) {
       template: null,
       sections: DEFAULT_SECTIONS,
       promptFile: null,
+      allowProjectPrompt: false,
     };
   }
   return {
@@ -139,6 +140,7 @@ function parseOptions(raw) {
         ? raw.sections
         : DEFAULT_SECTIONS,
     promptFile: raw.promptFile || null,
+    allowProjectPrompt: raw.allowProjectPrompt === true,
   };
 }
 
@@ -191,7 +193,11 @@ function resolvePromptFile(options, projectRoot, log) {
   const projectPrompt = projectRoot
     ? join(projectRoot, ".opencode", "agents-sync-prompt.md")
     : null;
-  if (projectPrompt && existsSync(projectPrompt)) {
+  if (
+    options.allowProjectPrompt &&
+    projectPrompt &&
+    existsSync(projectPrompt)
+  ) {
     try {
       // Security: Ensure project prompt doesn't escape project root via symlink
       const realPromptPath = realpathSync(projectPrompt);
