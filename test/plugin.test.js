@@ -8,6 +8,7 @@ const {
   default: pluginObj,
   _setPromptTimers,
   _resetLogSizes,
+  _resetLogMaxBytesCache,
 } = await import("../index.js");
 const plugin = pluginObj.server;
 
@@ -60,6 +61,7 @@ describe("opencode-agents-sync", () => {
     _setPromptTimers(500, 500, 3);
     _flushDelay = 1000;
     _resetLogSizes();
+    _resetLogMaxBytesCache();
   });
   it("should export a valid PluginModule with id and server", () => {
     assert.equal(typeof pluginObj, "object");

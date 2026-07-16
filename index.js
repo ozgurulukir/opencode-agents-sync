@@ -69,6 +69,12 @@ export function _resetLogSizes() {
   logSizes.clear();
 }
 
+// Test-only helper to reset the logMaxBytes cache between tests.
+export function _resetLogMaxBytesCache() {
+  cachedLogMaxBytesEnv = undefined;
+  cachedLogMaxBytesNum = DEBUG_LOG_DEFAULT_MAX_BYTES;
+}
+
 function buildSectionList(sections) {
   return sections.map((s) => `- ${s}`).join("\n");
 }
@@ -226,9 +232,18 @@ function resolvePromptFile(options, projectRoot, log) {
   return null;
 }
 
+let cachedLogMaxBytesEnv;
+let cachedLogMaxBytesNum = DEBUG_LOG_DEFAULT_MAX_BYTES;
+
 function logMaxBytes() {
-  const n = Number(process.env.AGENTS_SYNC_LOG_MAX_BYTES);
-  return Number.isFinite(n) && n > 0 ? n : DEBUG_LOG_DEFAULT_MAX_BYTES;
+  const envVar = process.env.AGENTS_SYNC_LOG_MAX_BYTES;
+  if (envVar !== cachedLogMaxBytesEnv) {
+    cachedLogMaxBytesEnv = envVar;
+    const n = Number(envVar);
+    cachedLogMaxBytesNum =
+      Number.isFinite(n) && n > 0 ? n : DEBUG_LOG_DEFAULT_MAX_BYTES;
+  }
+  return cachedLogMaxBytesNum;
 }
 
 function rotateDebugLogIfNeeded(logPath, lineLength) {
@@ -251,9 +266,8 @@ function rotateDebugLogIfNeeded(logPath, lineLength) {
 
 const ensuredLogDirs = new Set();
 
-function writeDebugLog(logDir, msg) {
+function writeDebugLog(logDir, logPath, msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
-  const logPath = join(logDir, "agents-sync-debug.log");
   try {
     if (!ensuredLogDirs.has(logDir)) {
       mkdirSync(logDir, { recursive: true });
@@ -291,7 +305,10 @@ const plugin = async (input, rawOptions) => {
   const options = parseOptions(rawOptions);
   const { client, directory: projectRoot } = input;
   const logDir = resolveLogDir(input);
-  const log = options.debug ? (msg) => writeDebugLog(logDir, msg) : () => {};
+  const logPath = join(logDir, "agents-sync-debug.log");
+  const log = options.debug
+    ? (msg) => writeDebugLog(logDir, logPath, msg)
+    : () => {};
   log(
     `Plugin v${PLUGIN_VERSION} loaded, enabled=${options.enabled}, continue=${options.continue}, debug=${options.debug}, projectRoot=${projectRoot}, logDir=${logDir}`,
   );
