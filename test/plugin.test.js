@@ -777,16 +777,21 @@ describe("opencode-agents-sync", () => {
     });
 
     describe("custom prompt file", () => {
-      let tmpDir;
+      let tmpDir, globalDir;
 
       beforeEach(() => {
         tmpDir = join(tmpdir(), `agents-sync-test-${Date.now()}`);
+        globalDir = join(tmpdir(), `agents-sync-global-${Date.now()}`);
         mkdirSync(tmpDir, { recursive: true });
         mkdirSync(join(tmpDir, ".opencode"), { recursive: true });
+        mkdirSync(join(globalDir, "opencode"), { recursive: true });
+        process.env.XDG_CONFIG_HOME = globalDir;
       });
 
       afterEach(() => {
+        delete process.env.XDG_CONFIG_HOME;
         rmSync(tmpDir, { recursive: true, force: true });
+        rmSync(globalDir, { recursive: true, force: true });
       });
 
       it("should use project-level prompt file over built-in", async () => {
