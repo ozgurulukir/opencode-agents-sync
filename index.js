@@ -9,6 +9,7 @@ import {
   openSync,
   fstatSync,
   closeSync,
+  constants,
 } from "node:fs";
 import { isAbsolute, join, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -155,7 +156,7 @@ function loadPromptFile(promptFile, projectRoot, log) {
   try {
     let fd;
     try {
-      fd = openSync(promptFile, "r");
+      fd = openSync(promptFile, constants.O_RDONLY | constants.O_NONBLOCK);
       // Security: Cheap guard first — reject non-regular files (directories, devices, etc.)
       const stats = fstatSync(fd);
       if (!stats.isFile()) {
@@ -176,8 +177,14 @@ function loadPromptFile(promptFile, projectRoot, log) {
       const projectAgentsMd = projectRoot
         ? join(projectRoot, "AGENTS.md")
         : "AGENTS.md";
-      content = content.replaceAll("{{project_agents_md}}", projectAgentsMd);
-      content = content.replaceAll("{{global_agents_md}}", globalAgentsMd);
+      content = content.replaceAll(
+        "{{project_agents_md}}",
+        () => projectAgentsMd,
+      );
+      content = content.replaceAll(
+        "{{global_agents_md}}",
+        () => globalAgentsMd,
+      );
       log(`Loaded prompt file: ${promptFile} (${content.length} chars)`);
       return content;
     } finally {
@@ -217,7 +224,7 @@ function resolvePromptFile(options, projectRoot, log) {
         );
       } else {
         log(`Found project-level prompt: ${projectPrompt}`);
-        return projectPrompt;
+        return realPromptPath;
       }
     } catch (err) {
       // Ignore if realpath fails
