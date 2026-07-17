@@ -156,6 +156,8 @@ function loadPromptFile(promptFile, projectRoot, log) {
   try {
     let fd;
     try {
+      // O_NONBLOCK prevents the open/read from hanging on blocking special files
+      // (FIFOs, named pipes, devices). Harmless on regular files.
       fd = openSync(promptFile, constants.O_RDONLY | constants.O_NONBLOCK);
       // Security: Cheap guard first — reject non-regular files (directories, devices, etc.)
       const stats = fstatSync(fd);
