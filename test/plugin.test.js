@@ -1,6 +1,12 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import {
+  writeFileSync,
+  mkdirSync,
+  rmSync,
+  existsSync,
+  symlinkSync,
+} from "node:fs";
 import { join, sep } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -430,6 +436,34 @@ describe("opencode-agents-sync", () => {
       const text = mockClient.calls[0].body.parts[0].text;
       // Should fall back to built-in prompt because the directory was rejected
       assert.ok(text.includes("Target sections to update:"));
+    });
+
+    it("should not inject replacement patterns ($&) from project path", async () => {
+      // Regression: replaceAll(pattern, string) treats $& / $1 / $$ in the
+      // replacement as special. A projectRoot containing "$&" would otherwise
+      // inject the matched substring into the rendered prompt. The fix uses a
+      // function replacement, which is treated literally.
+      const dollarDir = join(tmpDir, "price-$&-dir");
+      mkdirSync(dollarDir, { recursive: true });
+      writeFileSync(
+        join(dollarDir, "prompt.md"),
+        "Path: {{project_agents_md}}",
+      );
+      const mockClient = makeMockClient();
+      const hooks = await plugin(
+        { client: mockClient, directory: dollarDir },
+        { promptFile: join(dollarDir, "prompt.md") },
+      );
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "test" },
+        { enabled: true },
+      );
+      await flushTimers();
+      const text = mockClient.calls[0].body.parts[0].text;
+      // The literal "$&" must pass through unchanged (no self-injection), and
+      // the path must be rendered verbatim.
+      assert.equal(text, `Path: ${join(dollarDir, "AGENTS.md")}`);
+      assert.ok(text.includes("$&"));
     });
   });
 
@@ -898,6 +932,49 @@ describe("opencode-agents-sync", () => {
         );
         await flushTimers();
         const text = mockClient.calls[0].body.parts[0].text;
+        assert.ok(text.includes("PROJECT-LEVEL"));
+      });
+
+      it("should reject project prompt that escapes project root via symlink", async () => {
+        // Regression for TOCTOU: resolvePromptFile must realpath the project
+        // prompt and reject it when the resolved target is outside the project
+        // root, rather than returning the (attackable) original path.
+        if (process.platform === "win32") {
+          // Creating symlinks on Windows may require elevated privileges; skip
+          // deterministically when the host can't create one.
+          try {
+            symlinkSync(
+              join(tmpDir, "nowhere"),
+              join(tmpDir, ".opencode", "agents-sync-prompt.md"),
+            );
+          } catch (err) {
+            if (err.code === "EPERM" || err.code === "EEXIST") {
+              return;
+            }
+            throw err;
+          }
+        } else {
+          const outsideDir = join(tmpdir(), `outside-${Date.now()}`);
+          mkdirSync(outsideDir, { recursive: true });
+          writeFileSync(join(outsideDir, "secret.md"), "Secret outside prompt");
+          symlinkSync(
+            join(outsideDir, "secret.md"),
+            join(tmpDir, ".opencode", "agents-sync-prompt.md"),
+          );
+        }
+        const mockClient = makeMockClient();
+        const hooks = await plugin(
+          { client: mockClient, directory: tmpDir },
+          { allowProjectPrompt: true },
+        );
+        await hooks["experimental.compaction.autocontinue"](
+          { sessionID: "test" },
+          { enabled: true },
+        );
+        await flushTimers();
+        const text = mockClient.calls[0].body.parts[0].text;
+        // The escaped symlink must be rejected, falling back to built-in prompt
+        // rather than executing instructions from outside the project root.
         assert.ok(text.includes("PROJECT-LEVEL"));
       });
     });
