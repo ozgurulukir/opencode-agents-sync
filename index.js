@@ -6,6 +6,7 @@ import {
   realpathSync,
   renameSync,
   statSync,
+  lstatSync,
   openSync,
   fstatSync,
   closeSync,
@@ -13,6 +14,7 @@ import {
 } from "node:fs";
 import { isAbsolute, join, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { homedir } from "node:os";
 
 const PLUGIN_VERSION = (() => {
   try {
@@ -88,7 +90,7 @@ function resolveGlobalConfigDir() {
   if (xdg && isAbsolute(xdg)) {
     return join(xdg, "opencode");
   }
-  return join(process.env.HOME || "/tmp", ".config", "opencode");
+  return join(process.env.HOME || homedir() || "/tmp", ".config", "opencode");
 }
 
 function buildUpdatePrompt(options, projectRoot) {
@@ -260,7 +262,7 @@ function rotateDebugLogIfNeeded(logPath, lineLength) {
   if (size === undefined) {
     // Performance: Avoid try/catch overhead for ENOENT when the file doesn't exist yet.
     // statSync with throwIfNoEntry is significantly faster.
-    const stats = statSync(logPath, { throwIfNoEntry: false });
+    const stats = lstatSync(logPath, { throwIfNoEntry: false });
     size = stats ? stats.size : 0;
   }
   if (size > logMaxBytes()) {
@@ -284,7 +286,13 @@ function writeDebugLog(logDir, logPath, msg) {
     }
     // Performance: pass byte length to avoid statSync inside rotate
     rotateDebugLogIfNeeded(logPath, Buffer.byteLength(line, "utf8"));
-    appendFileSync(logPath, line);
+    appendFileSync(logPath, line, {
+      flag:
+        constants.O_WRONLY |
+        constants.O_CREAT |
+        constants.O_APPEND |
+        constants.O_NOFOLLOW,
+    });
   } catch (err) {
     console.error(
       `[opencode-agents-sync] Failed to write debug log: ${err.code || err.message}`,
@@ -302,7 +310,7 @@ function resolveLogDir(input) {
   if (envDir && isAbsolute(envDir)) {
     return envDir;
   }
-  const home = process.env.HOME || "/tmp";
+  const home = process.env.HOME || homedir() || "/tmp";
   // Best-effort: detect mimocode by its server URL hostname.
   if (input.serverUrl?.hostname.includes("mimocode")) {
     return join(home, ".local", "share", "mimocode");
