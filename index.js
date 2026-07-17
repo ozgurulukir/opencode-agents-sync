@@ -313,8 +313,13 @@ function resolveLogDir(input) {
 const plugin = async (input, rawOptions) => {
   const options = parseOptions(rawOptions);
   const { client, directory: projectRoot } = input;
-  const logDir = resolveLogDir(input);
-  const logPath = join(logDir, "agents-sync-debug.log");
+
+  let logDir, logPath;
+  if (options.debug) {
+    logDir = resolveLogDir(input);
+    logPath = join(logDir, "agents-sync-debug.log");
+  }
+
   const log = options.debug
     ? (msg) => writeDebugLog(logDir, logPath, msg)
     : () => {};
@@ -324,6 +329,11 @@ const plugin = async (input, rawOptions) => {
 
   const hooks = {};
   const activeSessions = new Set();
+
+  // Performance: Cache the generated built-in prompt text to avoid rebuilding
+  // it (including mapping DEFAULT_SECTIONS and interpolating strings) on every
+  // compaction event.
+  let cachedDefaultPrompt = null;
 
   if (options.template) {
     hooks["experimental.session.compacting"] = async (hookInput, output) => {
@@ -361,7 +371,12 @@ const plugin = async (input, rawOptions) => {
 
     const promptFile = resolvePromptFile(options, projectRoot, log);
     const filePrompt = loadPromptFile(promptFile, projectRoot, log);
-    const promptText = filePrompt || buildUpdatePrompt(options, projectRoot);
+
+    if (!filePrompt && !cachedDefaultPrompt) {
+      cachedDefaultPrompt = buildUpdatePrompt(options, projectRoot);
+    }
+
+    const promptText = filePrompt || cachedDefaultPrompt;
     log(
       `Deferring AGENTS.md update prompt (${promptText.length} chars, source=${promptFile || "built-in"})`,
     );

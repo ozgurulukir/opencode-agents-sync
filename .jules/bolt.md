@@ -12,3 +12,8 @@
 
 **Learning:** `process.env` lookups cross the JS-C++ boundary in Node.js and have noticeable overhead in tight loops. Parsing `process.env` and calling `path.join` repeatedly can be slow.
 **Action:** Cache `process.env` lookups and `path.join` operations during plugin initialization to avoid redundant computation in high-frequency execution paths.
+
+## 2024-07-16 - [Redundant string generation in hook]
+
+**Learning:** Found that the plugin generates its default prompt text (including array mapping and string interpolation) on every single compaction event, even though the configuration is static. Additionally, path operations for disabled features were executed unconditionally.
+**Action:** Always cache derived configurations (like prompt strings) during plugin initialization if their inputs (`options`, `projectRoot`) are immutable for the instance lifecycle. Defer path building (like `join`) behind feature flags.
