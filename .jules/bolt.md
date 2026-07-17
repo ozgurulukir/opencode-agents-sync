@@ -17,3 +17,8 @@
 
 **Learning:** Found that the plugin generates its default prompt text (including array mapping and string interpolation) on every single compaction event, even though the configuration is static. Additionally, path operations for disabled features were executed unconditionally.
 **Action:** Always cache derived configurations (like prompt strings) during plugin initialization if their inputs (`options`, `projectRoot`) are immutable for the instance lifecycle. Defer path building (like `join`) behind feature flags.
+
+## 2024-07-17 - Optimize instance-dependent state resolution with lazy evaluation
+
+**Learning:** Moving path calculations outside of hooks into plugin initialization improves hook performance, but it can unintentionally slow down startup if the features aren't used or enabled (e.g. `options.enabled = false` or when options preclude their use). Also, moving dynamic file reads into initialization creates bugs if those files are expected to be updated _during_ a session.
+**Action:** Use lazy evaluation (`if (!cachedPaths) { ... }`) inside the hook itself. This defers the cost of path resolution until it's actually needed (saving initialization time) while still caching the result to avoid redundant calculations across multiple hook invocations. Keep file reads (`fs.readFileSync`) _inside_ the hook if the file contents might change at runtime.

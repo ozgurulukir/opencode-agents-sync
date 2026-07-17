@@ -153,7 +153,7 @@ function parseOptions(raw) {
   };
 }
 
-function loadPromptFile(promptFile, projectRoot, log) {
+function loadPromptFile(promptFile, log, projectAgentsMd, globalAgentsMd) {
   if (!promptFile) return null;
   try {
     let fd;
@@ -177,10 +177,6 @@ function loadPromptFile(promptFile, projectRoot, log) {
       }
 
       let content = readFileSync(fd, "utf-8").trim();
-      const globalAgentsMd = join(resolveGlobalConfigDir(), "AGENTS.md");
-      const projectAgentsMd = projectRoot
-        ? join(projectRoot, "AGENTS.md")
-        : "AGENTS.md";
       content = content.replaceAll(
         "{{project_agents_md}}",
         () => projectAgentsMd,
@@ -202,14 +198,17 @@ function loadPromptFile(promptFile, projectRoot, log) {
   }
 }
 
-function resolvePromptFile(options, projectRoot, log) {
+function resolvePromptFile(
+  options,
+  projectRoot,
+  log,
+  projectPrompt,
+  globalPrompt,
+) {
   if (options.promptFile) {
     log(`Using promptFile from config: ${options.promptFile}`);
     return options.promptFile;
   }
-  const projectPrompt = projectRoot
-    ? join(projectRoot, ".opencode", "agents-sync-prompt.md")
-    : null;
   if (
     options.allowProjectPrompt &&
     projectPrompt &&
@@ -234,7 +233,6 @@ function resolvePromptFile(options, projectRoot, log) {
       // Ignore if realpath fails
     }
   }
-  const globalPrompt = join(resolveGlobalConfigDir(), "agents-sync-prompt.md");
   if (existsSync(globalPrompt)) {
     log(`Found global-level prompt: ${globalPrompt}`);
     return globalPrompt;
@@ -338,10 +336,10 @@ const plugin = async (input, rawOptions) => {
   const hooks = {};
   const activeSessions = new Set();
 
-  // Performance: Cache the generated built-in prompt text to avoid rebuilding
-  // it (including mapping DEFAULT_SECTIONS and interpolating strings) on every
-  // compaction event.
+  // Performance: Cache the generated built-in prompt text and paths to avoid rebuilding
+  // them on every compaction event.
   let cachedDefaultPrompt = null;
+  let cachedPaths = null;
 
   if (options.template) {
     hooks["experimental.session.compacting"] = async (hookInput, output) => {
@@ -377,8 +375,33 @@ const plugin = async (input, rawOptions) => {
       output.enabled = false;
     }
 
-    const promptFile = resolvePromptFile(options, projectRoot, log);
-    const filePrompt = loadPromptFile(promptFile, projectRoot, log);
+    if (!cachedPaths) {
+      const globalConfigDir = resolveGlobalConfigDir();
+      cachedPaths = {
+        globalAgentsMd: join(globalConfigDir, "AGENTS.md"),
+        globalPromptPath: join(globalConfigDir, "agents-sync-prompt.md"),
+        projectAgentsMd: projectRoot
+          ? join(projectRoot, "AGENTS.md")
+          : "AGENTS.md",
+        projectPromptPath: projectRoot
+          ? join(projectRoot, ".opencode", "agents-sync-prompt.md")
+          : null,
+      };
+    }
+
+    const promptFile = resolvePromptFile(
+      options,
+      projectRoot,
+      log,
+      cachedPaths.projectPromptPath,
+      cachedPaths.globalPromptPath,
+    );
+    const filePrompt = loadPromptFile(
+      promptFile,
+      log,
+      cachedPaths.projectAgentsMd,
+      cachedPaths.globalAgentsMd,
+    );
 
     if (!filePrompt && !cachedDefaultPrompt) {
       cachedDefaultPrompt = buildUpdatePrompt(options, projectRoot);
