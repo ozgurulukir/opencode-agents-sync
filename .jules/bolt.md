@@ -22,3 +22,6 @@
 
 **Learning:** Moving path calculations outside of hooks into plugin initialization improves hook performance, but it can unintentionally slow down startup if the features aren't used or enabled (e.g. `options.enabled = false` or when options preclude their use). Also, moving dynamic file reads into initialization creates bugs if those files are expected to be updated _during_ a session.
 **Action:** Use lazy evaluation (`if (!cachedPaths) { ... }`) inside the hook itself. This defers the cost of path resolution until it's actually needed (saving initialization time) while still caching the result to avoid redundant calculations across multiple hook invocations. Keep file reads (`fs.readFileSync`) _inside_ the hook if the file contents might change at runtime.
+## 2026-07-18 - [Expensive Path Resolution]
+**Learning:** Repeated synchronous calls to `realpathSync` inside plugin hooks can cause significant bottlenecks.
+**Action:** Always compute deterministic properties (like resolved root paths) lazily once, store them in the hook closure's cache, and reuse them across subsequent triggers.

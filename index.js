@@ -200,7 +200,7 @@ function loadPromptFile(promptFile, log, projectAgentsMd, globalAgentsMd) {
 
 function resolvePromptFile(
   options,
-  projectRoot,
+  realProjectRoot,
   log,
   projectPrompt,
   globalPrompt,
@@ -214,23 +214,28 @@ function resolvePromptFile(
     projectPrompt &&
     existsSync(projectPrompt)
   ) {
-    try {
-      // Security: Ensure project prompt doesn't escape project root via symlink
-      const realPromptPath = realpathSync(projectPrompt);
-      const realProjectRoot = realpathSync(projectRoot);
-      if (
-        !realPromptPath.startsWith(realProjectRoot + sep) &&
-        realPromptPath !== realProjectRoot
-      ) {
-        log(
-          `Security warning: project prompt file escapes project directory, ignoring: ${projectPrompt}`,
-        );
-      } else {
-        log(`Found project-level prompt: ${projectPrompt}`);
-        return realPromptPath;
+    if (realProjectRoot) {
+      try {
+        // Security: Ensure project prompt doesn't escape project root via symlink
+        const realPromptPath = realpathSync(projectPrompt);
+        if (
+          !realPromptPath.startsWith(realProjectRoot + sep) &&
+          realPromptPath !== realProjectRoot
+        ) {
+          log(
+            `Security warning: project prompt file escapes project directory, ignoring: ${projectPrompt}`,
+          );
+        } else {
+          log(`Found project-level prompt: ${projectPrompt}`);
+          return realPromptPath;
+        }
+      } catch (err) {
+        // Ignore if realpath fails
       }
-    } catch (err) {
-      // Ignore if realpath fails
+    } else {
+      log(
+        `Could not resolve project root, ignoring project prompt: ${projectPrompt}`,
+      );
     }
   }
   if (existsSync(globalPrompt)) {
@@ -380,6 +385,14 @@ const plugin = async (input, rawOptions) => {
 
     if (!cachedPaths) {
       const globalConfigDir = resolveGlobalConfigDir();
+      let realProjectRoot = null;
+      if (projectRoot) {
+        try {
+          realProjectRoot = realpathSync(projectRoot);
+        } catch (err) {
+          // Ignore if realpath fails
+        }
+      }
       cachedPaths = {
         globalAgentsMd: join(globalConfigDir, "AGENTS.md"),
         globalPromptPath: join(globalConfigDir, "agents-sync-prompt.md"),
@@ -389,12 +402,13 @@ const plugin = async (input, rawOptions) => {
         projectPromptPath: projectRoot
           ? join(projectRoot, ".opencode", "agents-sync-prompt.md")
           : null,
+        realProjectRoot,
       };
     }
 
     const promptFile = resolvePromptFile(
       options,
-      projectRoot,
+      cachedPaths.realProjectRoot,
       log,
       cachedPaths.projectPromptPath,
       cachedPaths.globalPromptPath,
