@@ -348,6 +348,7 @@ const plugin = async (input, rawOptions) => {
   // them on every compaction event.
   let cachedDefaultPrompt = null;
   let cachedPaths = null;
+  let cachedPromptFile = undefined;
 
   if (options.template) {
     hooks["experimental.session.compacting"] = async (hookInput, output) => {
@@ -406,15 +407,18 @@ const plugin = async (input, rawOptions) => {
       };
     }
 
-    const promptFile = resolvePromptFile(
-      options,
-      cachedPaths.realProjectRoot,
-      log,
-      cachedPaths.projectPromptPath,
-      cachedPaths.globalPromptPath,
-    );
+    if (cachedPromptFile === undefined) {
+      // Performance: Cache resolved prompt file path to avoid redundant synchronous filesystem operations (existsSync)
+      cachedPromptFile = resolvePromptFile(
+        options,
+        cachedPaths.realProjectRoot,
+        log,
+        cachedPaths.projectPromptPath,
+        cachedPaths.globalPromptPath,
+      );
+    }
     const filePrompt = loadPromptFile(
-      promptFile,
+      cachedPromptFile,
       log,
       cachedPaths.projectAgentsMd,
       cachedPaths.globalAgentsMd,
@@ -426,7 +430,7 @@ const plugin = async (input, rawOptions) => {
 
     const promptText = filePrompt || cachedDefaultPrompt;
     log(
-      `Deferring AGENTS.md update prompt (${promptText.length} chars, source=${promptFile || "built-in"})`,
+      `Deferring AGENTS.md update prompt (${promptText.length} chars, source=${cachedPromptFile || "built-in"})`,
     );
 
     const scheduleUpdate = (fn) => {
