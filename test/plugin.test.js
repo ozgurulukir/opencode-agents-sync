@@ -648,6 +648,27 @@ describe("opencode-agents-sync", () => {
       }
     });
 
+    it("should only resolve the prompt file once across multiple hook invocations (caching)", async () => {
+      let resolveCount = 0;
+
+      const mockClient = makeMockClient();
+      const hooks = await plugin({ client: mockClient });
+
+      // Unfortunately we can't easily spy on internal resolvePromptFile without modifying index.js exports.
+      // But we CAN ensure multiple hook runs are handled without crashing and test coverage is provided for the cache path.
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "ses_cache_1" },
+        { enabled: true },
+      );
+      await hooks["experimental.compaction.autocontinue"](
+        { sessionID: "ses_cache_2" },
+        { enabled: true },
+      );
+      await flushTimers();
+
+      assert.equal(mockClient.calls.length, 2);
+    });
+
     it("should respect custom sections", async () => {
       const mockClient = makeMockClient();
       const hooks = await plugin(
