@@ -28,6 +28,7 @@
 **Prevention:** Always use `node:os.homedir()` to securely resolve the user's home directory instead of blindly trusting environment variables or falling back to `/tmp`. Always use `fs.lstatSync` instead of `fs.statSync` when inspecting file properties to avoid following symlinks. Use the `{ flag: fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_APPEND | fs.constants.O_NOFOLLOW }` flag combination in `fs.appendFileSync` to ensure the operation strictly refuses to open symlinks.
 
 ## 2025-07-18 - [Insecure Log File Permissions]
+
 **Vulnerability:** The plugin created log directories and files without explicitly setting permissions, defaulting to world-readable (and potentially world-writable) depending on the system's umask.
 **Learning:** Debug logs can contain sensitive information like file paths, configuration details, or session IDs. Leaving them world-readable exposes this information to other local users on the system.
 **Prevention:** Always use explicit, restrictive permissions (e.g., `mode: 0o700` for directories and `mode: 0o600` for files) when creating files or directories that could contain sensitive data.
