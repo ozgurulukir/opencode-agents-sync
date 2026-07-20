@@ -283,12 +283,15 @@ const ensuredLogDirs = new Set();
 
 function writeDebugLog(logDir, logPath, msg) {
   // Security: Sanitize newlines to prevent CRLF log injection
+<<<<<<< Updated upstream
+  const sanitizedMsg = String(msg).replace(/[\r\n]+/g, " ");
+=======
   // Performance: Fast path string include check before regex execution
-  const strMsg = String(msg);
   const sanitizedMsg =
-    strMsg.includes("\n") || strMsg.includes("\r")
-      ? strMsg.replace(CRLF_REGEX, " ")
-      : strMsg;
+    typeof msg === "string" && (msg.includes("\n") || msg.includes("\r"))
+      ? msg.replace(CRLF_REGEX, " ")
+      : msg;
+>>>>>>> Stashed changes
   const line = `[${new Date().toISOString()}] ${sanitizedMsg}\n`;
   try {
     if (!ensuredLogDirs.has(logDir)) {
