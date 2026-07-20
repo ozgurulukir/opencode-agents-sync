@@ -278,11 +278,17 @@ function rotateDebugLogIfNeeded(logPath, lineLength) {
   }
 }
 
+const CRLF_REGEX = /[\r\n]+/g;
 const ensuredLogDirs = new Set();
 
 function writeDebugLog(logDir, logPath, msg) {
   // Security: Sanitize newlines to prevent CRLF log injection
-  const sanitizedMsg = String(msg).replace(/[\r\n]+/g, " ");
+  // Performance: Fast path string include check before regex execution
+  const strMsg = String(msg);
+  const sanitizedMsg =
+    strMsg.includes("\n") || strMsg.includes("\r")
+      ? strMsg.replace(CRLF_REGEX, " ")
+      : strMsg;
   const line = `[${new Date().toISOString()}] ${sanitizedMsg}\n`;
   try {
     if (!ensuredLogDirs.has(logDir)) {
