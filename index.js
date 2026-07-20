@@ -282,8 +282,7 @@ const ensuredLogDirs = new Set();
 
 function writeDebugLog(logDir, logPath, msg) {
   // Security: Sanitize newlines to prevent CRLF log injection
-  const sanitizedMsg =
-    typeof msg === "string" ? msg.replace(/[\r\n]+/g, " ") : msg;
+  const sanitizedMsg = String(msg).replace(/[\r\n]+/g, " ");
   const line = `[${new Date().toISOString()}] ${sanitizedMsg}\n`;
   try {
     if (!ensuredLogDirs.has(logDir)) {
@@ -306,7 +305,7 @@ function writeDebugLog(logDir, logPath, msg) {
     console.error(
       `[opencode-agents-sync] Failed to write debug log: ${err.code || err.message}`,
     );
-    console.error(`[opencode-agents-sync] Original message: ${msg}`);
+    console.error(`[opencode-agents-sync] Original message: ${sanitizedMsg}`);
   }
 }
 

@@ -32,3 +32,9 @@
 **Vulnerability:** The plugin created log directories and files without explicitly setting permissions, defaulting to world-readable (and potentially world-writable) depending on the system's umask.
 **Learning:** Debug logs can contain sensitive information like file paths, configuration details, or session IDs. Leaving them world-readable exposes this information to other local users on the system.
 **Prevention:** Always use explicit, restrictive permissions (e.g., `mode: 0o700` for directories and `mode: 0o600` for files) when creating files or directories that could contain sensitive data.
+
+## 2026-07-20 - [CRLF Log Injection via Object Coercion Bypass]
+
+**Vulnerability:** The `writeDebugLog` function sanitized strings to prevent CRLF injection, but only checked if `typeof msg === 'string'`. Objects or Errors passed into the function bypassed this check and were later coerced into strings during string interpolation, leading to potential CRLF injection. Additionally, the fallback `console.error` logged the unsanitized original message upon write failure.
+**Learning:** Type-checking before sanitizing can leave loopholes for object coercion during later string interpolation. Defensive error logging should also utilize the sanitized input, not the raw input.
+**Prevention:** Always force type coercion (e.g., `String(msg)`) before applying sanitization logic to ensure all data types are properly sanitized, and log the sanitized version during fallback routines.
