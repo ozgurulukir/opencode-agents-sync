@@ -281,7 +281,10 @@ function rotateDebugLogIfNeeded(logPath, lineLength) {
 const ensuredLogDirs = new Set();
 
 function writeDebugLog(logDir, logPath, msg) {
-  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  // Security: Sanitize newlines to prevent CRLF log injection
+  const sanitizedMsg =
+    typeof msg === "string" ? msg.replace(/[\r\n]+/g, " ") : msg;
+  const line = `[${new Date().toISOString()}] ${sanitizedMsg}\n`;
   try {
     if (!ensuredLogDirs.has(logDir)) {
       // Security: Create log directory with restricted permissions
