@@ -153,9 +153,36 @@ function parseOptions(raw) {
   };
 }
 
-function loadPromptFile(promptFile, log, projectAgentsMd, globalAgentsMd) {
-  if (!promptFile) return null;
+function loadPromptFile(
+  promptFileObj,
+  realProjectRoot,
+  log,
+  projectAgentsMd,
+  globalAgentsMd,
+) {
+  if (!promptFileObj || !promptFileObj.path) return null;
+  const promptFile = promptFileObj.path;
   try {
+    if (promptFileObj.isProject && realProjectRoot) {
+      try {
+        const currentRealPath = realpathSync(promptFile);
+        if (
+          !currentRealPath.startsWith(realProjectRoot + sep) &&
+          currentRealPath !== realProjectRoot
+        ) {
+          log(
+            `Security warning: project prompt file escapes project directory (TOCTOU), ignoring: ${promptFile}`,
+          );
+          return null;
+        }
+      } catch (err) {
+        log(
+          `Failed to verify realpath for ${promptFile}: ${err.code || err.message}`,
+        );
+        return null;
+      }
+    }
+
     let fd;
     try {
       // O_NONBLOCK prevents the open/read from hanging on blocking special files
@@ -177,14 +204,18 @@ function loadPromptFile(promptFile, log, projectAgentsMd, globalAgentsMd) {
       }
 
       let content = readFileSync(fd, "utf-8").trim();
-      content = content.replaceAll(
-        "{{project_agents_md}}",
-        () => projectAgentsMd,
-      );
-      content = content.replaceAll(
-        "{{global_agents_md}}",
-        () => globalAgentsMd,
-      );
+      // Performance: Fast-path string scan before executing multiple replaceAll operations.
+      // This is especially beneficial for large prompt files (up to 1MB allowed).
+      if (content.includes("{{")) {
+        content = content.replaceAll(
+          "{{project_agents_md}}",
+          () => projectAgentsMd,
+        );
+        content = content.replaceAll(
+          "{{global_agents_md}}",
+          () => globalAgentsMd,
+        );
+      }
       log(`Loaded prompt file: ${promptFile} (${content.length} chars)`);
       return content;
     } finally {
@@ -207,7 +238,7 @@ function resolvePromptFile(
 ) {
   if (options.promptFile) {
     log(`Using promptFile from config: ${options.promptFile}`);
-    return options.promptFile;
+    return { path: options.promptFile, isProject: false };
   }
   if (
     options.allowProjectPrompt &&
@@ -227,7 +258,7 @@ function resolvePromptFile(
           );
         } else {
           log(`Found project-level prompt: ${projectPrompt}`);
-          return realPromptPath;
+          return { path: realPromptPath, isProject: true };
         }
       } catch (err) {
         // Ignore if realpath fails
@@ -240,7 +271,7 @@ function resolvePromptFile(
   }
   if (existsSync(globalPrompt)) {
     log(`Found global-level prompt: ${globalPrompt}`);
-    return globalPrompt;
+    return { path: globalPrompt, isProject: false };
   }
   log("No custom prompt file found, using built-in");
   return null;
@@ -440,6 +471,7 @@ const plugin = async (input, rawOptions) => {
     // We only want to load it if it's truthy (a string path)
     const filePrompt = loadPromptFile(
       cachedPromptFile === false ? null : cachedPromptFile,
+      cachedPaths.realProjectRoot,
       log,
       cachedPaths.projectAgentsMd,
       cachedPaths.globalAgentsMd,
@@ -451,7 +483,7 @@ const plugin = async (input, rawOptions) => {
 
     const promptText = filePrompt || cachedDefaultPrompt;
     log(
-      `Deferring AGENTS.md update prompt (${promptText.length} chars, source=${(cachedPromptFile === false ? null : cachedPromptFile) || "built-in"})`,
+      `Deferring AGENTS.md update prompt (${promptText.length} chars, source=${(cachedPromptFile === false ? null : cachedPromptFile?.path) || "built-in"})`,
     );
 
     const scheduleUpdate = (fn) => {
