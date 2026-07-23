@@ -204,14 +204,18 @@ function loadPromptFile(
       }
 
       let content = readFileSync(fd, "utf-8").trim();
-      content = content.replaceAll(
-        "{{project_agents_md}}",
-        () => projectAgentsMd,
-      );
-      content = content.replaceAll(
-        "{{global_agents_md}}",
-        () => globalAgentsMd,
-      );
+      // Performance: Fast-path string scan before executing multiple replaceAll operations.
+      // This is especially beneficial for large prompt files (up to 1MB allowed).
+      if (content.includes("{{")) {
+        content = content.replaceAll(
+          "{{project_agents_md}}",
+          () => projectAgentsMd,
+        );
+        content = content.replaceAll(
+          "{{global_agents_md}}",
+          () => globalAgentsMd,
+        );
+      }
       log(`Loaded prompt file: ${promptFile} (${content.length} chars)`);
       return content;
     } finally {
