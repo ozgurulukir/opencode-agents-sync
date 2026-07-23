@@ -321,16 +321,23 @@ function writeDebugLog(logDir, logPath, msg) {
       ? strMsg.replace(CRLF_REGEX, " ")
       : strMsg;
   const line = `[${new Date().toISOString()}] ${sanitizedMsg}\n`;
+
+  // Performance: Encode to Buffer once to avoid dual UTF-8 scans.
+  // Buffer.byteLength(string) scans the string once.
+  // appendFileSync(..., string) scans it a second time to encode it.
+  // By encoding upfront, we get an O(1) length lookup and pass the raw bytes.
+  const lineBuf = Buffer.from(line, "utf8");
+
   try {
     if (!ensuredLogDirs.has(logDir)) {
       // Security: Create log directory with restricted permissions
       mkdirSync(logDir, { recursive: true, mode: 0o700 });
       ensuredLogDirs.add(logDir);
     }
-    // Performance: pass byte length to avoid statSync inside rotate
-    rotateDebugLogIfNeeded(logPath, Buffer.byteLength(line, "utf8"));
+    // Performance: pass pre-calculated byte length to avoid statSync inside rotate
+    rotateDebugLogIfNeeded(logPath, lineBuf.length);
     // Security: Create log file with restricted permissions to avoid exposing sensitive data
-    appendFileSync(logPath, line, {
+    appendFileSync(logPath, lineBuf, {
       mode: 0o600,
       flag:
         constants.O_WRONLY |

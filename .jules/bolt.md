@@ -3,7 +3,7 @@
 **Learning:** Calling `mkdirSync(logDir, { recursive: true })` repeatedly, even when the directory already exists, is significantly slower than checking a cache. Caching successful log directory creations using a `Set` avoids expensive filesystem operations.
 **Action:** Used a module-level `Set` to track directories that have already been created within the plugin's lifetime, reducing the overhead of `mkdirSync`.
 
-## $(date +%Y-%m-%d) - Optimizing file presence checks with statSync throwIfNoEntry
+## 2026-07-21 - Optimizing file presence checks with statSync throwIfNoEntry
 
 **Learning:** When checking if a file exists before retrieving its stats, using `existsSync` followed by `statSync` performs two synchronous disk operations. Alternatively, using `statSync` inside a `try/catch ENOENT` block introduces significant overhead from the Javascript engine creating and handling Error objects. `statSync(path, { throwIfNoEntry: false })` is much faster as it performs a single disk operation and returns `undefined` instead of throwing an error when the file is not found.
 **Action:** Replaced `existsSync` + `statSync` and `try/catch ENOENT` constructs with `statSync(path, { throwIfNoEntry: false })` for performance optimization in synchronous disk checks.
@@ -32,6 +32,11 @@
 
 **Learning:** For frequent string sanitization using global regular expressions (e.g., removing newlines with `/[\r\n]+/g`), executing the regex is consistently slower than a simple fast-path string scan (`msg.includes("\n") || msg.includes("\r")`), particularly when the majority of strings do not match the pattern. In benchmarks for this repository, standard log lines without newlines processed up to 4x faster with an `includes` check before falling back to the `replace` function, minimizing unnecessary Regex engine invocation overhead.
 **Action:** When applying regex replacements in hot paths where the target pattern is infrequently present (such as log injection sanitization), check for the existence of key characters with `String.prototype.includes()` before calling `String.prototype.replace()`. Also, remember to extract regular expressions to top-level constants.
+
+## 2026-07-21 - Optimizing dual UTF-8 scans in synchronous file appends
+
+**Learning:** When using `Buffer.byteLength(string, "utf8")` to find the string's length, V8 scans the string once. If you immediately pass that same string to `appendFileSync(path, string)`, it scans the string a second time to allocate and encode it into a buffer.
+**Action:** Always encode the string to a Buffer upfront: `const buf = Buffer.from(string, "utf8")`. This converts an expensive dual-scan into a single encoding pass, giving you an O(1) length lookup via `buf.length` and letting you pass the pre-encoded raw bytes to the filesystem.
 
 ## 2024-07-22 - [Fast-path String Scanning for Template Variables]
 
