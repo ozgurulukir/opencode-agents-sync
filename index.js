@@ -189,7 +189,11 @@ function loadPromptFile(
     try {
       // O_NONBLOCK prevents the open/read from hanging on blocking special files
       // (FIFOs, named pipes, devices). Harmless on regular files.
-      fd = openSync(promptFile, constants.O_RDONLY | constants.O_NONBLOCK);
+      // Security: use O_NOFOLLOW for project files to close the TOCTOU window
+      const flags = promptFileObj.isProject
+        ? constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW
+        : constants.O_RDONLY | constants.O_NONBLOCK;
+      fd = openSync(promptFile, flags);
       // Security: Cheap guard first — reject non-regular files (directories, devices, etc.)
       const stats = fstatSync(fd);
       if (!stats.isFile()) {
