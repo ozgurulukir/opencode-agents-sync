@@ -619,7 +619,11 @@ describe("opencode-agents-sync", () => {
       assert.ok(text.includes("AGENTS.md"));
       assert.ok(text.includes("Target sections"));
       assert.ok(text.includes(join("/home/user/project", "AGENTS.md")));
-      assert.ok(text.includes("~/.config/opencode/AGENTS.md"));
+      assert.ok(
+        text.includes(
+          join(process.env.HOME, ".config", "opencode", "AGENTS.md"),
+        ),
+      );
       assert.ok(text.includes("Exclusions"));
       assert.ok(text.includes("skill"));
       assert.ok(text.includes("PROJECT-LEVEL"));

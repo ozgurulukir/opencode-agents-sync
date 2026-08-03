@@ -92,10 +92,10 @@ function resolveGlobalConfigDir() {
   if (xdg && isAbsolute(xdg)) {
     return join(xdg, "opencode");
   }
-  return join(process.env.HOME || homedir() || "/tmp", ".config", "opencode");
+  return join(homedir(), ".config", "opencode");
 }
 
-function buildUpdatePrompt(options, projectRoot) {
+function buildUpdatePrompt(options, projectRoot, globalAgentsMd) {
   const sections = options.sections || DEFAULT_SECTIONS;
   const sectionList = buildSectionList(sections);
   const agentsMdPath = projectRoot
@@ -119,11 +119,11 @@ Format for each new entry:
 
 Exclusions — do NOT add:
 - Skill definitions, skill instructions, or skill-related content (these belong in .opencode/skills/)
-- Anything already present in ~/.config/opencode/AGENTS.md (global user-level instructions)
+- Anything already present in ${globalAgentsMd} (global user-level instructions)
 - Generic coding advice, tool descriptions, or non-project-specific information
 
 Rules:
-- Only modify the PROJECT-LEVEL AGENTS.md, never touch ~/.config/opencode/AGENTS.md
+- Only modify the PROJECT-LEVEL AGENTS.md, never touch ${globalAgentsMd}
 - Use the Edit tool to make changes — do not just describe what should change
 - When adding new entries, also consolidate: remove duplicates, update stale information, and merge related entries
 - If nothing new was discovered, respond with "No new AGENTS.md updates needed." and do not modify the file.`;
@@ -484,7 +484,11 @@ const plugin = async (input, rawOptions) => {
     );
 
     if (!filePrompt && !cachedDefaultPrompt) {
-      cachedDefaultPrompt = buildUpdatePrompt(options, projectRoot);
+      cachedDefaultPrompt = buildUpdatePrompt(
+        options,
+        projectRoot,
+        cachedPaths.globalAgentsMd,
+      );
     }
 
     const promptText = filePrompt || cachedDefaultPrompt;
