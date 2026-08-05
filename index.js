@@ -51,6 +51,68 @@ let PROMPT_DEFER_MS = 500;
 let PROMPT_MAX_ATTEMPTS = 3;
 let PROMPT_RETRY_DELAY_MS = 500;
 
+// Deferred scheduling helper. Extracted to module level so the autocontinue
+// hook body stays focused on orchestration. Uses setTimeout when a positive
+// delay is configured, setImmediate otherwise (for tests that set defer=0).
+function scheduleDeferred(fn) {
+  if (PROMPT_DEFER_MS > 0) {
+    setTimeout(fn, PROMPT_DEFER_MS);
+  } else {
+    setImmediate(fn);
+  }
+}
+
+// Retry loop for the deferred AGENTS.md update prompt. Extracted to module
+// level to keep the hook body readable. Retries up to PROMPT_MAX_ATTEMPTS
+// with PROMPT_RETRY_DELAY_MS backoff, then clears the active session flag
+// on success or final failure.
+async function sendPromptWithRetry(
+  client,
+  sessionID,
+  promptText,
+  log,
+  activeSessions,
+) {
+  const startTime = Date.now();
+  for (let attempt = 1; attempt <= PROMPT_MAX_ATTEMPTS; attempt++) {
+    try {
+      log(
+        `Sending deferred AGENTS.md update prompt (attempt ${attempt}/${PROMPT_MAX_ATTEMPTS})`,
+      );
+      await client.session.prompt({
+        path: { id: sessionID },
+        body: {
+          parts: [{ type: "text", text: promptText }],
+        },
+      });
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      log(
+        `AGENTS.md update completed in ${elapsed}s after attempt ${attempt}, clearing active flag`,
+      );
+      activeSessions.delete(sessionID);
+      return;
+    } catch (err) {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      log(
+        `Attempt ${attempt}/${PROMPT_MAX_ATTEMPTS} failed after ${elapsed}s: ${err.code || err.message}`,
+      );
+      if (attempt < PROMPT_MAX_ATTEMPTS) {
+        if (PROMPT_RETRY_DELAY_MS > 0) {
+          log(`Retrying in ${PROMPT_RETRY_DELAY_MS}ms...`);
+          await new Promise((resolve) =>
+            setTimeout(resolve, PROMPT_RETRY_DELAY_MS),
+          );
+        }
+      } else {
+        log(
+          `All ${PROMPT_MAX_ATTEMPTS} attempts failed. Stack: ${err.stack || "n/a"}`,
+        );
+        activeSessions.delete(sessionID);
+      }
+    }
+  }
+}
+
 // Module-level mutable state for log rotation tracking. Cleared by
 // _resetLogSizes() between tests to avoid cross-test pollution.
 const logSizes = new Map();
@@ -402,6 +464,56 @@ const plugin = async (input, rawOptions) => {
   let cachedPaths = null;
   let cachedPromptFile = null;
 
+  // Resolve and cache project/global paths on first call. Uses realpathSync
+  // to resolve symlinks for security checks in loadPromptFile. Returns the
+  // cached result on subsequent calls (hot path, no I/O).
+  function resolveAndCachePaths(projectRoot) {
+    if (cachedPaths) return cachedPaths;
+
+    const globalConfigDir = resolveGlobalConfigDir();
+    let realProjectRoot = null;
+    if (projectRoot) {
+      try {
+        realProjectRoot = realpathSync(projectRoot);
+      } catch (err) {
+        // Ignore if realpath fails
+      }
+    }
+    cachedPaths = {
+      globalAgentsMd: join(globalConfigDir, "AGENTS.md"),
+      globalPromptPath: join(globalConfigDir, "agents-sync-prompt.md"),
+      projectAgentsMd: projectRoot
+        ? join(projectRoot, "AGENTS.md")
+        : "AGENTS.md",
+      projectPromptPath: projectRoot
+        ? join(projectRoot, ".opencode", "agents-sync-prompt.md")
+        : null,
+      realProjectRoot,
+    };
+    return cachedPaths;
+  }
+
+  // Resolve and cache the prompt file path on first call. Uses the null→false
+  // sentinel so we don't re-resolve on subsequent hits when no custom prompt
+  // file exists. Returns the cached result on subsequent calls.
+  function resolveAndCachePromptFile(options, log) {
+    if (cachedPromptFile !== null) return cachedPromptFile;
+
+    // Resolve on first call; cache result (including null→false sentinel)
+    cachedPromptFile = resolvePromptFile(
+      options,
+      cachedPaths.realProjectRoot,
+      log,
+      cachedPaths.projectPromptPath,
+      cachedPaths.globalPromptPath,
+    );
+    // null means "no prompt file found" — use false so we don't re-resolve
+    if (cachedPromptFile === null) {
+      cachedPromptFile = false;
+    }
+    return cachedPromptFile;
+  }
+
   if (options.template) {
     hooks["experimental.session.compacting"] = async (hookInput, output) => {
       const sessionID = hookInput.sessionID;
@@ -436,113 +548,33 @@ const plugin = async (input, rawOptions) => {
       output.enabled = false;
     }
 
-    if (!cachedPaths) {
-      const globalConfigDir = resolveGlobalConfigDir();
-      let realProjectRoot = null;
-      if (projectRoot) {
-        try {
-          realProjectRoot = realpathSync(projectRoot);
-        } catch (err) {
-          // Ignore if realpath fails
-        }
-      }
-      cachedPaths = {
-        globalAgentsMd: join(globalConfigDir, "AGENTS.md"),
-        globalPromptPath: join(globalConfigDir, "agents-sync-prompt.md"),
-        projectAgentsMd: projectRoot
-          ? join(projectRoot, "AGENTS.md")
-          : "AGENTS.md",
-        projectPromptPath: projectRoot
-          ? join(projectRoot, ".opencode", "agents-sync-prompt.md")
-          : null,
-        realProjectRoot,
-      };
-    }
+    const paths = resolveAndCachePaths(projectRoot);
 
-    if (cachedPromptFile === null) {
-      // Performance: Cache resolved prompt file path to avoid redundant synchronous filesystem operations (existsSync)
-      cachedPromptFile = resolvePromptFile(
-        options,
-        cachedPaths.realProjectRoot,
-        log,
-        cachedPaths.projectPromptPath,
-        cachedPaths.globalPromptPath,
-      );
-      // If it resolved to null, use false so we don't keep resolving it on subsequent hits.
-      if (cachedPromptFile === null) {
-        cachedPromptFile = false;
-      }
-    }
+    const promptFileObj = resolveAndCachePromptFile(options, log);
 
-    // We only want to load it if it's truthy (a string path)
     const filePrompt = loadPromptFile(
-      cachedPromptFile === false ? null : cachedPromptFile,
-      cachedPaths.realProjectRoot,
+      promptFileObj === false ? null : promptFileObj,
+      paths.realProjectRoot,
       log,
-      cachedPaths.projectAgentsMd,
-      cachedPaths.globalAgentsMd,
+      paths.projectAgentsMd,
+      paths.globalAgentsMd,
     );
 
     if (!filePrompt && !cachedDefaultPrompt) {
       cachedDefaultPrompt = buildUpdatePrompt(
         options,
         projectRoot,
-        cachedPaths.globalAgentsMd,
+        paths.globalAgentsMd,
       );
     }
 
     const promptText = filePrompt || cachedDefaultPrompt;
     log(
-      `Deferring AGENTS.md update prompt (${promptText.length} chars, source=${(cachedPromptFile === false ? null : cachedPromptFile?.path) || "built-in"})`,
+      `Deferring AGENTS.md update prompt (${promptText.length} chars, source=${(promptFileObj === false ? null : promptFileObj?.path) || "built-in"})`,
     );
 
-    const scheduleUpdate = (fn) => {
-      if (PROMPT_DEFER_MS > 0) {
-        setTimeout(fn, PROMPT_DEFER_MS);
-      } else {
-        setImmediate(fn);
-      }
-    };
-
-    scheduleUpdate(async () => {
-      const startTime = Date.now();
-      for (let attempt = 1; attempt <= PROMPT_MAX_ATTEMPTS; attempt++) {
-        try {
-          log(
-            `Sending deferred AGENTS.md update prompt (attempt ${attempt}/${PROMPT_MAX_ATTEMPTS})`,
-          );
-          await client.session.prompt({
-            path: { id: sessionID },
-            body: {
-              parts: [{ type: "text", text: promptText }],
-            },
-          });
-          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-          log(
-            `AGENTS.md update completed in ${elapsed}s after attempt ${attempt}, clearing active flag`,
-          );
-          activeSessions.delete(sessionID);
-          return;
-        } catch (err) {
-          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-          log(
-            `Attempt ${attempt}/${PROMPT_MAX_ATTEMPTS} failed after ${elapsed}s: ${err.code || err.message}`,
-          );
-          if (attempt < PROMPT_MAX_ATTEMPTS) {
-            if (PROMPT_RETRY_DELAY_MS > 0) {
-              log(`Retrying in ${PROMPT_RETRY_DELAY_MS}ms...`);
-              await new Promise((resolve) =>
-                setTimeout(resolve, PROMPT_RETRY_DELAY_MS),
-              );
-            }
-          } else {
-            log(
-              `All ${PROMPT_MAX_ATTEMPTS} attempts failed. Stack: ${err.stack || "n/a"}`,
-            );
-            activeSessions.delete(sessionID);
-          }
-        }
-      }
+    scheduleDeferred(() => {
+      sendPromptWithRetry(client, sessionID, promptText, log, activeSessions);
     });
   };
 

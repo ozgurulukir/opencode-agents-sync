@@ -106,7 +106,7 @@ Variables: `{{project_agents_md}}`, `{{global_agents_md}}`
 ## Essential Commands
 
 ```bash
-# Run all tests (45 tests)
+# Run all tests (51 tests)
 node --test 'test/*.test.js'
 
 # Check / apply formatting (config: .prettierrc.json)
@@ -150,7 +150,7 @@ Optional peer dependencies (auto-discovered at runtime):
 
 ```
 opencode-agents-sync/
-├── index.js           # Plugin entry (single file, ~365 lines)
+├── index.js           # Plugin entry (single file, ~552 lines)
 ├── package.json       # NPM package configuration
 ├── README.md          # User documentation
 ├── AGENTS.md          # This file
@@ -159,6 +159,6 @@ opencode-agents-sync/
 ├── install.sh         # Symlink + SDK install script (Linux/macOS/Git Bash/WSL)
 ├── install.ps1        # Symlink + SDK install script (Windows PowerShell 7+)
 ├── test/
-│   └── plugin.test.js # 45 tests (compacting, autocontinue, cascade, prompt file, multi-session, XDG, debug log, retry, log dir, security)
+│   └── plugin.test.js # 51 tests (compacting, autocontinue, cascade, prompt file, multi-session, XDG, debug log, retry, log dir, security)
 └── LICENSE            # MIT License
 ```

@@ -44,7 +44,9 @@
 **Vulnerability:** The plugin checked if a project-level prompt file (`.opencode/agents-sync-prompt.md`) resolved to a safe path within the project directory using `realpathSync`. However, to optimize performance, it cached this validated string path. An attacker could exploit a Time-of-Check to Time-of-Use (TOCTOU) vulnerability by replacing the `.md` file or its parent directory with a symlink to an arbitrary system file (e.g., `/etc/shadow`) after the initial check but before a subsequent read. The `openSync` call would then blindly follow the symlink, leading to arbitrary file read and prompt injection.
 **Learning:** Caching the result of a path validation check (the path string itself) creates a race condition window. Validating a file path and then later re-opening it by its path string is unsafe if the underlying file system can change.
 **Prevention:** To prevent TOCTOU symlink vulnerabilities when caching file paths for performance, cache path metadata (e.g., `{ path, isProject }`) rather than just the string. Re-validate the path with `realpathSync` immediately before file operations like `openSync` to ensure it hasn't escaped the secure directory boundary.
+
 ## 2024-07-29 - [Fix Time-of-Check to Time-of-Use (TOCTOU) symlink vulnerability]
+
 **Vulnerability:** A TOCTOU vulnerability existed where an attacker could replace a project's prompt file with a symlink pointing outside the directory after `realpathSync` verification but before `openSync`.
 **Learning:** Checking the path validity in `realpathSync` and later using `openSync` allows for an attack window where the file type/path can change.
 **Prevention:** Use `O_NOFOLLOW` flag during `openSync` if the path being read is specific to a project directory to ensure the open will fail if the file is a symlink.
