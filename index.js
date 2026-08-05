@@ -380,6 +380,18 @@ function rotateDebugLogIfNeeded(logPath, lineLength) {
 const CRLF_REGEX = /[\r\n]+/g;
 const ensuredLogDirs = new Set();
 
+let cachedTimestampStr = "";
+let cachedTimestampMs = 0;
+
+function getCachedISOTime() {
+  const now = Date.now();
+  if (now !== cachedTimestampMs) {
+    cachedTimestampStr = new Date(now).toISOString();
+    cachedTimestampMs = now;
+  }
+  return cachedTimestampStr;
+}
+
 function writeDebugLog(logDir, logPath, msg) {
   // Security: Sanitize newlines to prevent CRLF log injection
   // Performance: Fast path string include check before regex execution
@@ -388,7 +400,9 @@ function writeDebugLog(logDir, logPath, msg) {
     strMsg.includes("\n") || strMsg.includes("\r")
       ? strMsg.replace(CRLF_REGEX, " ")
       : strMsg;
-  const line = `[${new Date().toISOString()}] ${sanitizedMsg}\n`;
+
+  // Performance: Cache timestamp to avoid creating a Date object on every log line
+  const line = `[${getCachedISOTime()}] ${sanitizedMsg}\n`;
 
   // Performance: Encode to Buffer once to avoid dual UTF-8 scans.
   // Buffer.byteLength(string) scans the string once.
