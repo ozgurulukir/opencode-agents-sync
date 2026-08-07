@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -188,7 +189,7 @@ describe("opencode-agents-sync", () => {
         serverUrl: new URL("http://localhost:3000"),
       });
       const logFile = join(
-        process.env.HOME || "/tmp",
+        homedir(),
         ".local",
         "share",
         "opencode",
@@ -203,7 +204,7 @@ describe("opencode-agents-sync", () => {
         serverUrl: new URL("http://mimocode.local:3000"),
       });
       const logFile = join(
-        process.env.HOME || "/tmp",
+        homedir(),
         ".local",
         "share",
         "mimocode",
@@ -218,7 +219,7 @@ describe("opencode-agents-sync", () => {
         serverUrl: undefined,
       });
       const logFile = join(
-        process.env.HOME || "/tmp",
+        homedir(),
         ".local",
         "share",
         "opencode",
@@ -620,9 +621,7 @@ describe("opencode-agents-sync", () => {
       assert.ok(text.includes("Target sections"));
       assert.ok(text.includes(join("/home/user/project", "AGENTS.md")));
       assert.ok(
-        text.includes(
-          join(process.env.HOME, ".config", "opencode", "AGENTS.md"),
-        ),
+        text.includes(join(homedir(), ".config", "opencode", "AGENTS.md")),
       );
       assert.ok(text.includes("Exclusions"));
       assert.ok(text.includes("skill"));

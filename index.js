@@ -430,7 +430,7 @@ function resolveLogDir(input) {
   if (envDir && isAbsolute(envDir)) {
     return envDir;
   }
-  const home = process.env.HOME || homedir() || "/tmp";
+  const home = homedir();
   // Best-effort: detect mimocode by its server URL hostname.
   if (input.serverUrl?.hostname.includes("mimocode")) {
     return join(home, ".local", "share", "mimocode");
