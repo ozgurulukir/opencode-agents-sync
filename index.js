@@ -227,7 +227,11 @@ function loadPromptFile(
   if (!promptFileObj || !promptFileObj.path) return null;
   const promptFile = promptFileObj.path;
   try {
-    if (promptFileObj.isProject && realProjectRoot) {
+    if (promptFileObj.isProject) {
+      if (!realProjectRoot) {
+        log(`Security warning: prompt file is project-bound but project root could not be resolved. Failing closed: ${promptFile}`);
+        return null;
+      }
       try {
         const currentRealPath = realpathSync(promptFile);
         if (
@@ -310,9 +314,9 @@ function resolvePromptFile(
     // boundaries and symlink protections, preventing arbitrary file reads by malicious workspaces.
     let isProject = true;
     try {
-      const realPath = realpathSync(options.promptFile);
       const globalDir = realpathSync(resolveGlobalConfigDir());
-      if (realPath.startsWith(globalDir + sep) || realPath === globalDir) {
+      // Re-check containment using the non-resolved path to prevent TOCTOU bypass of O_NOFOLLOW
+      if (options.promptFile.startsWith(globalDir + sep) || options.promptFile === globalDir) {
         isProject = false;
       }
     } catch (err) {
