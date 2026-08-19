@@ -50,3 +50,9 @@
 **Vulnerability:** A TOCTOU vulnerability existed where an attacker could replace a project's prompt file with a symlink pointing outside the directory after `realpathSync` verification but before `openSync`.
 **Learning:** Checking the path validity in `realpathSync` and later using `openSync` allows for an attack window where the file type/path can change.
 **Prevention:** Use `O_NOFOLLOW` flag during `openSync` if the path being read is specific to a project directory to ensure the open will fail if the file is a symlink.
+
+## 2024-03-XX - [LFI in promptFile Config Option]
+
+**Vulnerability:** The plugin blindly trusted the `options.promptFile` path via `isProject: false`, allowing arbitrary local files (e.g., `/etc/passwd`) to be read.
+**Learning:** Untrusted paths from workspace configurations shouldn't bypass directory boundaries just because they're explicitly configured.
+**Prevention:** Default to treating workspace paths as project-bound (`isProject: true`) to enforce strict directory boundaries and symlink protections (`O_NOFOLLOW`). Only allow exceptions if the path resolves explicitly to a trusted global configuration directory.

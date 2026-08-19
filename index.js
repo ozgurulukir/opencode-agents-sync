@@ -300,13 +300,28 @@ function loadPromptFile(
 function resolvePromptFile(
   options,
   realProjectRoot,
+  realGlobalConfigDir,
   log,
   projectPrompt,
   globalPrompt,
 ) {
   if (options.promptFile) {
     log(`Using promptFile from config: ${options.promptFile}`);
-    return { path: options.promptFile, isProject: false };
+    let isProject = true; // Default to untrusted project boundaries
+    if (realGlobalConfigDir) {
+      try {
+        const realPromptPath = realpathSync(options.promptFile);
+        if (
+          realPromptPath.startsWith(realGlobalConfigDir + sep) ||
+          realPromptPath === realGlobalConfigDir
+        ) {
+          isProject = false; // Trusted global config directory
+        }
+      } catch (err) {
+        // Ignore realpath errors, it will fail open/stat later safely
+      }
+    }
+    return { path: options.promptFile, isProject };
   }
   if (
     options.allowProjectPrompt &&
@@ -493,6 +508,12 @@ const plugin = async (input, rawOptions) => {
         // Ignore if realpath fails
       }
     }
+    let realGlobalConfigDir = null;
+    try {
+      realGlobalConfigDir = realpathSync(globalConfigDir);
+    } catch (err) {
+      // Ignore if realpath fails
+    }
     cachedPaths = {
       globalAgentsMd: join(globalConfigDir, "AGENTS.md"),
       globalPromptPath: join(globalConfigDir, "agents-sync-prompt.md"),
@@ -503,6 +524,7 @@ const plugin = async (input, rawOptions) => {
         ? join(projectRoot, ".opencode", "agents-sync-prompt.md")
         : null,
       realProjectRoot,
+      realGlobalConfigDir,
     };
     return cachedPaths;
   }
@@ -517,6 +539,7 @@ const plugin = async (input, rawOptions) => {
     cachedPromptFile = resolvePromptFile(
       options,
       cachedPaths.realProjectRoot,
+      cachedPaths.realGlobalConfigDir,
       log,
       cachedPaths.projectPromptPath,
       cachedPaths.globalPromptPath,
