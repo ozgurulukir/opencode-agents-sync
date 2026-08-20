@@ -67,7 +67,7 @@ The prompt instructs the LLM to:
 
 Prompt is resolved in order:
 
-1. `promptFile` config option (absolute path)
+1. `promptFile` config option (absolute path; must reside inside the project root or the global config directory — paths outside both boundaries are rejected and fall back to the built-in template)
 2. `<project>/.opencode/agents-sync-prompt.md`
 3. `$XDG_CONFIG_HOME/opencode/agents-sync-prompt.md` (or `~/.config/opencode/agents-sync-prompt.md` if unset)
 4. Built-in template
@@ -100,7 +100,7 @@ Variables: `{{project_agents_md}}`, `{{global_agents_md}}`
 | `continue`   | boolean  | `false` | Also send default "Continue..." after update |
 | `debug`      | boolean  | `true`  | Write the debug log (set `false` to silence) |
 | `sections`   | string[] | all 8   | Which sections to target                     |
-| `promptFile` | string   | `null`  | Absolute path to custom prompt template      |
+| `promptFile` | string   | `null`  | Absolute path to custom prompt template (must be inside project root or global config dir; violating paths fall back to built-in) |
 | `template`   | string   | `null`  | Raw compaction prompt replacement (advanced) |
 
 ## Essential Commands
