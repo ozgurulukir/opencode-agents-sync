@@ -44,5 +44,6 @@
 **Action:** Always wrap `.replaceAll` calls on large inputs with a fast-path `.includes()` check for the shared prefix (e.g., `{{`) to skip the expensive scans if the variables are not present. In tests, this yielded a 2x-3x speedup on large inputs.
 
 ## 2024-05-18 - [Array Mapping vs Join Performance]
+
 **Learning:** In Node.js, mapping an array just to prepend a string to each element (e.g., `arr.map(s => "- " + s).join("\n")`) is significantly slower (by ~40-60%) than directly joining with the prefix embedded in the separator (e.g., `"- " + arr.join("\n- ")`) because `.map()` allocates a new intermediate array in memory.
 **Action:** When building bulleted lists or similarly prefixed/suffixed string blocks from arrays, skip intermediate allocations by cleverly using `.join()` separators if the array length > 0.

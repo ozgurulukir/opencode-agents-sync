@@ -920,7 +920,6 @@ describe("opencode-agents-sync", () => {
         assert.ok(text.includes("PROJECT-LEVEL"));
       });
 
-
       it("should reject options.promptFile pointing to an absolute path outside project root", async () => {
         const outsideDir = join(tmpdir(), `pf-outside-${Date.now()}`);
         mkdirSync(outsideDir, { recursive: true });
@@ -944,8 +943,42 @@ describe("opencode-agents-sync", () => {
         assert.ok(text.includes("PROJECT-LEVEL"));
       });
 
+      it("should reject options.promptFile escaping global dir via traversal", async () => {
+        const globalDir = join(
+          process.env.XDG_CONFIG_HOME || join(tmpdir(), ".config"),
+          "opencode",
+        );
+        mkdirSync(globalDir, { recursive: true });
+
+        const outsideDir = join(tmpdir(), "outside-" + Date.now());
+        mkdirSync(outsideDir, { recursive: true });
+        const secretPath = join(outsideDir, "secret.md");
+        writeFileSync(secretPath, "SECRET_FILE");
+
+        // Construct a path that starts with globalDir but traverses out
+        const maliciousPath =
+          globalDir + "/../../../../../../../../../../../../.." + secretPath;
+
+        const mockClient = makeMockClient();
+        const hooks = await plugin(
+          { client: mockClient, directory: tmpDir },
+          { promptFile: maliciousPath },
+        );
+        await hooks["experimental.compaction.autocontinue"](
+          { sessionID: "test" },
+          { enabled: true },
+        );
+        await flushTimers();
+        const text = mockClient.calls[0].body.parts[0].text;
+        // Should fall back to built-in prompt
+        assert.ok(text.includes("PROJECT-LEVEL"));
+      });
+
       it("should accept options.promptFile inside the global config dir", async () => {
-        const globalDir = join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "opencode");
+        const globalDir = join(
+          process.env.XDG_CONFIG_HOME || join(homedir(), ".config"),
+          "opencode",
+        );
         mkdirSync(globalDir, { recursive: true });
         const customFile = join(globalDir, "my-global-custom.md");
         writeFileSync(customFile, "Global custom prompt");
