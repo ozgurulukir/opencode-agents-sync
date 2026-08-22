@@ -920,6 +920,113 @@ describe("opencode-agents-sync", () => {
         assert.ok(text.includes("PROJECT-LEVEL"));
       });
 
+      it("should reject options.promptFile pointing to an absolute path outside project root", async () => {
+        const outsideDir = join(tmpdir(), `pf-outside-${Date.now()}`);
+        mkdirSync(outsideDir, { recursive: true });
+        const customFile = join(outsideDir, "my-custom-prompt.md");
+        writeFileSync(customFile, "Absolute path prompt outside");
+        const mockClient = makeMockClient();
+        const hooks = await plugin(
+          {
+            client: mockClient,
+            directory: tmpDir,
+          },
+          { promptFile: customFile },
+        );
+        await hooks["experimental.compaction.autocontinue"](
+          { sessionID: "test" },
+          { enabled: true },
+        );
+        await flushTimers();
+        const text = mockClient.calls[0].body.parts[0].text;
+        // Should fall back to built-in prompt because it was rejected
+        assert.ok(text.includes("PROJECT-LEVEL"));
+      });
+
+      it("should reject options.promptFile escaping global dir via traversal", async () => {
+        const globalDir = join(
+          process.env.XDG_CONFIG_HOME || join(tmpdir(), ".config"),
+          "opencode",
+        );
+        mkdirSync(globalDir, { recursive: true });
+
+        const outsideDir = join(tmpdir(), "outside-" + Date.now());
+        mkdirSync(outsideDir, { recursive: true });
+        const secretPath = join(outsideDir, "secret.md");
+        writeFileSync(secretPath, "SECRET_FILE");
+
+        // Construct a path that starts with globalDir but traverses out
+        const maliciousPath =
+          globalDir + "/../../../../../../../../../../../../.." + secretPath;
+
+        const mockClient = makeMockClient();
+        const hooks = await plugin(
+          { client: mockClient, directory: tmpDir },
+          { promptFile: maliciousPath },
+        );
+        await hooks["experimental.compaction.autocontinue"](
+          { sessionID: "test" },
+          { enabled: true },
+        );
+        await flushTimers();
+        const text = mockClient.calls[0].body.parts[0].text;
+        // Should fall back to built-in prompt
+        assert.ok(text.includes("PROJECT-LEVEL"));
+      });
+
+      it("should accept options.promptFile inside the global config dir", async () => {
+        const globalDir = join(
+          process.env.XDG_CONFIG_HOME || join(homedir(), ".config"),
+          "opencode",
+        );
+        mkdirSync(globalDir, { recursive: true });
+        const customFile = join(globalDir, "my-global-custom.md");
+        writeFileSync(customFile, "Global custom prompt");
+        const mockClient = makeMockClient();
+        const hooks = await plugin(
+          {
+            client: mockClient,
+            directory: tmpDir,
+          },
+          { promptFile: customFile },
+        );
+        await hooks["experimental.compaction.autocontinue"](
+          { sessionID: "test" },
+          { enabled: true },
+        );
+        await flushTimers();
+        const text = mockClient.calls[0].body.parts[0].text;
+        assert.equal(text, "Global custom prompt");
+      });
+
+      it("should reject a symlinked options.promptFile via O_NOFOLLOW", async () => {
+        const customFile = join(tmpDir, "my-custom-prompt.md");
+        const realFile = join(tmpDir, "real-prompt.md");
+        writeFileSync(realFile, "Real absolute path prompt");
+        try {
+          symlinkSync(realFile, customFile);
+        } catch (e) {
+          // skip if can't symlink
+          return;
+        }
+        const mockClient = makeMockClient();
+        const hooks = await plugin(
+          {
+            client: mockClient,
+            directory: tmpDir,
+          },
+          { promptFile: customFile },
+        );
+        await hooks["experimental.compaction.autocontinue"](
+          { sessionID: "test" },
+          { enabled: true },
+        );
+        await flushTimers();
+        const text = mockClient.calls[0].body.parts[0].text;
+        // Should fall back to built-in prompt because O_NOFOLLOW rejects the symlink
+        assert.ok(text.includes("PROJECT-LEVEL"));
+      });
+
       it("should use promptFile config option with absolute path", async () => {
         const customFile = join(tmpDir, "my-custom-prompt.md");
         writeFileSync(customFile, "Absolute path prompt");

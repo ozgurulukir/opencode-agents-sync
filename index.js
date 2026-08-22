@@ -227,7 +227,13 @@ function loadPromptFile(
   if (!promptFileObj || !promptFileObj.path) return null;
   const promptFile = promptFileObj.path;
   try {
-    if (promptFileObj.isProject && realProjectRoot) {
+    if (promptFileObj.isProject) {
+      if (!realProjectRoot) {
+        log(
+          `Security warning: prompt file is project-bound but project root could not be resolved. Failing closed: ${promptFile}`,
+        );
+        return null;
+      }
       try {
         const currentRealPath = realpathSync(promptFile);
         if (
@@ -251,10 +257,9 @@ function loadPromptFile(
     try {
       // O_NONBLOCK prevents the open/read from hanging on blocking special files
       // (FIFOs, named pipes, devices). Harmless on regular files.
-      // Security: use O_NOFOLLOW for project files to close the TOCTOU window
-      const flags = promptFileObj.isProject
-        ? constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW
-        : constants.O_RDONLY | constants.O_NONBLOCK;
+      // Security: use O_NOFOLLOW uniformly to prevent TOCTOU symlink attacks
+      const flags =
+        constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW;
       fd = openSync(promptFile, flags);
       // Security: Cheap guard first — reject non-regular files (directories, devices, etc.)
       const stats = fstatSync(fd);
@@ -306,7 +311,19 @@ function resolvePromptFile(
 ) {
   if (options.promptFile) {
     log(`Using promptFile from config: ${options.promptFile}`);
-    return { path: options.promptFile, isProject: false };
+    // Security: Treat options.promptFile as a project file by default to enforce path
+    // boundaries, preventing arbitrary file reads by malicious workspaces.
+    let isProject = true;
+    try {
+      const realPath = realpathSync(options.promptFile);
+      const globalDir = realpathSync(resolveGlobalConfigDir());
+      if (realPath.startsWith(globalDir + sep) || realPath === globalDir) {
+        isProject = false;
+      }
+    } catch (err) {
+      // Ignore resolution errors; fallback to restrictive isProject=true
+    }
+    return { path: options.promptFile, isProject };
   }
   if (
     options.allowProjectPrompt &&
