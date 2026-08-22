@@ -1047,6 +1047,33 @@ describe("opencode-agents-sync", () => {
         assert.equal(text, "Absolute path prompt");
       });
 
+      it("should reject options.promptFile outside project when project root is unresolvable", async () => {
+        // Regression (ported from #28): options.promptFile must default to
+        // isProject:true so it is rejected when the project root cannot be
+        // resolved (fail-closed), instead of being loaded with only O_NOFOLLOW.
+        const outsideDir = join(tmpdir(), `pf-unresolvable-${Date.now()}`);
+        mkdirSync(outsideDir, { recursive: true });
+        const customFile = join(outsideDir, "custom-prompt.md");
+        writeFileSync(customFile, "Outside prompt file content");
+        const mockClient = makeMockClient();
+        const hooks = await plugin(
+          {
+            client: mockClient,
+            directory: "/nonexistent/path/that/does/not/exist-12345",
+          },
+          { promptFile: customFile },
+        );
+        await hooks["experimental.compaction.autocontinue"](
+          { sessionID: "test" },
+          { enabled: true },
+        );
+        await flushTimers();
+        const text = mockClient.calls[0].body.parts[0].text;
+        // Should reject the custom file (since isProject=true but root=null) and fallback to built-in
+        assert.ok(text.includes("PROJECT-LEVEL"));
+        assert.ok(!text.includes("Outside prompt file content"));
+      });
+
       it("should ignore project-level prompt file by default for security", async () => {
         writeFileSync(
           join(tmpDir, ".opencode", "agents-sync-prompt.md"),
