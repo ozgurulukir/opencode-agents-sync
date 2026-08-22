@@ -940,36 +940,6 @@ describe("opencode-agents-sync", () => {
         assert.equal(text, "Absolute path prompt");
       });
 
-      it("should reject promptFile pointing outside project root (LFI regression)", async () => {
-        // Regression: options.promptFile must default to isProject:true so that
-        // a malicious workspace config cannot read arbitrary files (e.g. /etc/passwd).
-        const outsideDir = join(tmpdir(), `pf-lfi-${Date.now()}`);
-        mkdirSync(outsideDir, { recursive: true });
-        const outsideFile = join(outsideDir, "secret.md");
-        writeFileSync(outsideFile, "SENSITIVE DATA");
-        try {
-          const mockClient = makeMockClient();
-          const hooks = await plugin(
-            {
-              client: mockClient,
-              directory: tmpDir,
-            },
-            { promptFile: outsideFile },
-          );
-          await hooks["experimental.compaction.autocontinue"](
-            { sessionID: "test" },
-            { enabled: true },
-          );
-          await flushTimers();
-          const text = mockClient.calls[0].body.parts[0].text;
-          // Should fall back to built-in prompt because outsideFile is rejected
-          assert.ok(text.includes("PROJECT-LEVEL"));
-          assert.ok(!text.includes("SENSITIVE DATA"));
-        } finally {
-          rmSync(outsideDir, { recursive: true, force: true });
-        }
-      });
-
       it("should ignore project-level prompt file by default for security", async () => {
         writeFileSync(
           join(tmpDir, ".opencode", "agents-sync-prompt.md"),
@@ -1030,6 +1000,28 @@ describe("opencode-agents-sync", () => {
         // The escaped symlink must be rejected, falling back to built-in prompt
         // rather than executing instructions from outside the project root.
         assert.ok(text.includes("PROJECT-LEVEL"));
+      });
+
+      it("should reject options.promptFile outside project when project root is unresolvable", async () => {
+        const customFile = join(tmpdir(), "outside-custom-prompt.md");
+        writeFileSync(customFile, "Outside prompt file content");
+        const mockClient = makeMockClient();
+        const hooks = await plugin(
+          {
+            client: mockClient,
+            directory: null, // Simulate unresolvable project root
+          },
+          { promptFile: customFile },
+        );
+        await hooks["experimental.compaction.autocontinue"](
+          { sessionID: "test" },
+          { enabled: true },
+        );
+        await flushTimers();
+        const text = mockClient.calls[0].body.parts[0].text;
+        // Should reject the custom file (since isProject=true but root=null) and fallback to built-in
+        assert.ok(text.includes("PROJECT-LEVEL"));
+        assert.ok(!text.includes("Outside prompt file content"));
       });
     });
   });

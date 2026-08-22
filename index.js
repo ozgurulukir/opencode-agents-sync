@@ -227,7 +227,13 @@ function loadPromptFile(
   if (!promptFileObj || !promptFileObj.path) return null;
   const promptFile = promptFileObj.path;
   try {
-    if (promptFileObj.isProject && realProjectRoot) {
+    if (promptFileObj.isProject) {
+      if (!realProjectRoot) {
+        log(
+          `Security warning: cannot verify project boundaries because project root is unresolvable, rejecting prompt file: ${promptFile}`,
+        );
+        return null;
+      }
       try {
         const currentRealPath = realpathSync(promptFile);
         if (
