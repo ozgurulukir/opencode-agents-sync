@@ -227,6 +227,16 @@ function loadPromptFile(
   if (!promptFileObj || !promptFileObj.path) return null;
   const promptFile = promptFileObj.path;
   try {
+    let currentRealPath;
+    try {
+      currentRealPath = realpathSync(promptFile);
+    } catch (err) {
+      log(
+        `Failed to verify realpath for ${promptFile}: ${err.code || err.message}`,
+      );
+      return null;
+    }
+
     if (promptFileObj.isProject) {
       if (!realProjectRoot) {
         log(
@@ -234,20 +244,12 @@ function loadPromptFile(
         );
         return null;
       }
-      try {
-        const currentRealPath = realpathSync(promptFile);
-        if (
-          !currentRealPath.startsWith(realProjectRoot + sep) &&
-          currentRealPath !== realProjectRoot
-        ) {
-          log(
-            `Security warning: project prompt file escapes project directory (TOCTOU), ignoring: ${promptFile}`,
-          );
-          return null;
-        }
-      } catch (err) {
+      if (
+        !currentRealPath.startsWith(realProjectRoot + sep) &&
+        currentRealPath !== realProjectRoot
+      ) {
         log(
-          `Failed to verify realpath for ${promptFile}: ${err.code || err.message}`,
+          `Security warning: project prompt file escapes project directory (TOCTOU), ignoring: ${promptFile}`,
         );
         return null;
       }
@@ -260,11 +262,23 @@ function loadPromptFile(
       // Security: use O_NOFOLLOW uniformly to prevent TOCTOU symlink attacks
       const flags =
         constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW;
+      // Note: We use promptFile instead of currentRealPath here because O_NOFOLLOW
+      // verifies the final component of the path is not a symlink. If we open currentRealPath,
+      // O_NOFOLLOW won't protect against symlinks.
       fd = openSync(promptFile, flags);
       // Security: Cheap guard first — reject non-regular files (directories, devices, etc.)
       const stats = fstatSync(fd);
       if (!stats.isFile()) {
         log(`Prompt file is not a regular file, ignoring: ${promptFile}`);
+        return null;
+      }
+
+      // Security: Re-verify realpath after opening to prevent intermediate directory TOCTOU
+      const finalRealPath = realpathSync(promptFile);
+      if (finalRealPath !== currentRealPath) {
+        log(
+          `Security warning: prompt file realpath changed after opening (TOCTOU), ignoring: ${promptFile}`,
+        );
         return null;
       }
 
