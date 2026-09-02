@@ -43,6 +43,12 @@
 **Learning:** When applying multiple `.replaceAll` operations on potentially large strings (like up to 1MB prompt files) to substitute template variables, unconditionally running `replaceAll` adds significant overhead, especially if the string lacks the target variable (the engine must scan the full string).
 **Action:** Always wrap `.replaceAll` calls on large inputs with a fast-path `.includes()` check for the shared prefix (e.g., `{{`) to skip the expensive scans if the variables are not present. In tests, this yielded a 2x-3x speedup on large inputs.
 
+## 2024-07-23 - [Sanitizing Line Breaks Performance]
+
+**Learning:** In Node.js, replacing a known small set of strings (like line breaks \`\\r\\n\`, \`\\n\`, \`\\r\`) using sequential \`.replaceAll()\` operations is significantly faster than using a global Regular Expression (\`str.replace(/[\\r\\n]+/g, " ")\`). While the Regex is shorter to write, the engine overhead makes it slower.
+**Action:** Replace regular expressions with sequential \`.replaceAll()\` operations for simple, known string replacements to improve execution speed.
+
 ## 2024-05-18 - [Array Mapping vs Join Performance]
+
 **Learning:** In Node.js, mapping an array just to prepend a string to each element (e.g., `arr.map(s => "- " + s).join("\n")`) is significantly slower (by ~40-60%) than directly joining with the prefix embedded in the separator (e.g., `"- " + arr.join("\n- ")`) because `.map()` allocates a new intermediate array in memory.
 **Action:** When building bulleted lists or similarly prefixed/suffixed string blocks from arrays, skip intermediate allocations by cleverly using `.join()` separators if the array length > 0.

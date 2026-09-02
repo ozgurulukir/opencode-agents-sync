@@ -408,7 +408,6 @@ function rotateDebugLogIfNeeded(logPath, lineLength) {
   }
 }
 
-const CRLF_REGEX = /[\r\n]+/g;
 const ensuredLogDirs = new Set();
 
 let cachedTimestampStr = "";
@@ -425,11 +424,14 @@ function getCachedISOTime() {
 
 function writeDebugLog(logDir, logPath, msg) {
   // Security: Sanitize newlines to prevent CRLF log injection
-  // Performance: Fast path string include check before regex execution
+  // Performance: Fast path string include check before regex execution. sequential replaceAll is faster than regex.
   const strMsg = String(msg);
   const sanitizedMsg =
     strMsg.includes("\n") || strMsg.includes("\r")
-      ? strMsg.replace(CRLF_REGEX, " ")
+      ? strMsg
+          .replaceAll("\r\n", " ")
+          .replaceAll("\n", " ")
+          .replaceAll("\r", " ")
       : strMsg;
 
   // Performance: Cache timestamp to avoid creating a Date object on every log line

@@ -56,7 +56,9 @@
 **Vulnerability:** The plugin config object (`rawOptions`) merges global trusted configurations and untrusted workspace configurations. The `options.promptFile` config was unconditionally mapped to `isProject: false`, meaning it bypassed all security boundaries and `O_NOFOLLOW` symlink checks meant for project files. A malicious repository could specify `promptFile: "/etc/passwd"` in its local config to achieve arbitrary file read via the agent context.
 **Learning:** Configuration objects that aggregate global and local settings cannot be assumed to be globally trusted simply based on the config key. Options controlling file paths must be strictly validated.
 **Prevention:** When accepting file paths from untrusted workspace configurations, default to treating them as project-bound (`isProject: true`) to enforce strict directory boundaries and symlink protections (`O_NOFOLLOW`). Only allow exceptions (e.g., `isProject: false`) if the path resolves explicitly to a trusted global configuration directory.
+
 ## 2025-02-28 - [Fix intermediate directory TOCTOU]
+
 **Vulnerability:** Symlink TOCTOU attacks could evade path boundary restrictions by swapping an intermediate directory. `O_NOFOLLOW` only protects the final component of a path.
 **Learning:** Checking `realpathSync(path)` then opening `path` with `O_NOFOLLOW` is not sufficient, as an attacker can swap an intermediate component of `path` to a symlink.
 **Prevention:** Resolve the real path (`currentRealPath = realpathSync(path)`), open the original `path` with `O_NOFOLLOW` to prevent the final component from being a symlink, and then re-verify `realpathSync(path) === currentRealPath` to detect intermediate swaps.
