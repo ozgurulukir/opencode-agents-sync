@@ -60,3 +60,7 @@
 **Vulnerability:** Symlink TOCTOU attacks could evade path boundary restrictions by swapping an intermediate directory. `O_NOFOLLOW` only protects the final component of a path.
 **Learning:** Checking `realpathSync(path)` then opening `path` with `O_NOFOLLOW` is not sufficient, as an attacker can swap an intermediate component of `path` to a symlink.
 **Prevention:** Resolve the real path (`currentRealPath = realpathSync(path)`), open the original `path` with `O_NOFOLLOW` to prevent the final component from being a symlink, and then re-verify `realpathSync(path) === currentRealPath` to detect intermediate swaps.
+## 2024-09-02 - [Fix] TOCTOU Symlink Race Condition in loadPromptFile
+**Vulnerability:** A Time-of-Check to Time-of-Use (TOCTOU) vulnerability existed in `loadPromptFile`. Even with `O_NOFOLLOW` (which only checks the final path component) and a double `realpathSync` check, an attacker could rapidly restore the original directory structure after `openSync` but before the second `realpathSync`, allowing them to read an unintended file outside the project boundary.
+**Learning:** `realpathSync` string comparisons are insufficient for perfect TOCTOU prevention on intermediate directories because they rely on resolving names that can be swapped asynchronously.
+**Prevention:** Always capture the intended file's stats using `fs.statSync(currentRealPath)` and compare its exact `ino` (inode) and `dev` (device) numbers against the `fstatSync(fd)` of the opened file descriptor to guarantee the correct file was safely opened.

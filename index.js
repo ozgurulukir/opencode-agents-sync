@@ -237,6 +237,16 @@ function loadPromptFile(
       return null;
     }
 
+    let expectedStats;
+    try {
+      expectedStats = statSync(currentRealPath);
+    } catch (err) {
+      log(
+        `Failed to stat verified realpath for ${promptFile}: ${err.code || err.message}`,
+      );
+      return null;
+    }
+
     if (promptFileObj.isProject) {
       if (!realProjectRoot) {
         log(
@@ -273,11 +283,10 @@ function loadPromptFile(
         return null;
       }
 
-      // Security: Re-verify realpath after opening to prevent intermediate directory TOCTOU
-      const finalRealPath = realpathSync(promptFile);
-      if (finalRealPath !== currentRealPath) {
+      // Security: Verify ino and dev match to perfectly prevent TOCTOU symlink/directory swap attacks
+      if (stats.ino !== expectedStats.ino || stats.dev !== expectedStats.dev) {
         log(
-          `Security warning: prompt file realpath changed after opening (TOCTOU), ignoring: ${promptFile}`,
+          `Security warning: prompt file ino/dev changed after opening (TOCTOU), ignoring: ${promptFile}`,
         );
         return null;
       }
