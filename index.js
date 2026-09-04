@@ -140,6 +140,30 @@ export function _resetLogMaxBytesCache() {
   cachedLogMaxBytesNum = DEBUG_LOG_DEFAULT_MAX_BYTES;
 }
 
+// Returns true when the opened file (openedStats, obtained via fstatSync on
+// the fd) is the same inode we pre-verified (expectedStats, via statSync on
+// the resolved path). This is the core TOCTOU re-validation in loadPromptFile.
+//
+// On platforms where stat does not expose a stable inode/device (notably
+// Windows, where ino/dev are 0 for every file), the identity comparison is a
+// no-op, so we fall back to the name-based realpath re-check result
+// (fallbackRealPathMatch) instead of silently disabling the re-validation.
+// Exported for direct unit testing of the decision matrix.
+export function _promptFileIdentityMatches(
+  openedStats,
+  expectedStats,
+  fallbackRealPathMatch,
+) {
+  const identityReliable = expectedStats.ino !== 0 || expectedStats.dev !== 0;
+  const identityMatches =
+    openedStats.ino === expectedStats.ino &&
+    openedStats.dev === expectedStats.dev;
+  if (identityReliable) {
+    return identityMatches;
+  }
+  return fallbackRealPathMatch;
+}
+
 function buildSectionList(sections) {
   // Performance: Avoid intermediate array allocation and mapping overhead.
   // Using prefix + join("\n- ") is ~40-60% faster than map().join().
@@ -283,10 +307,31 @@ function loadPromptFile(
         return null;
       }
 
-      // Security: Verify ino and dev match to perfectly prevent TOCTOU symlink/directory swap attacks
-      if (stats.ino !== expectedStats.ino || stats.dev !== expectedStats.dev) {
+      // Security: Verify the opened file is the same inode we verified above.
+      // fstatSync inspects the fd directly (no name lookup), so a
+      // symlink/directory swap between the realpath capture and openSync is
+      // caught here — something a name-based realpath re-check could miss if
+      // the attacker restores the path before the second resolution.
+      //
+      // On platforms where stat does not expose a stable inode/device
+      // (notably Windows, where ino/dev are reported as 0), the identity
+      // comparison degenerates to a no-op. Fall back to a name-based realpath
+      // re-check in that case so the re-validation is never silently disabled.
+      const identityReliable =
+        expectedStats.ino !== 0 || expectedStats.dev !== 0;
+      let fallbackRealPathMatch = true;
+      if (!identityReliable) {
+        try {
+          fallbackRealPathMatch = realpathSync(promptFile) === currentRealPath;
+        } catch (err) {
+          fallbackRealPathMatch = false;
+        }
+      }
+      if (
+        !_promptFileIdentityMatches(stats, expectedStats, fallbackRealPathMatch)
+      ) {
         log(
-          `Security warning: prompt file ino/dev changed after opening (TOCTOU), ignoring: ${promptFile}`,
+          `Security warning: prompt file identity changed after opening (TOCTOU), ignoring: ${promptFile}`,
         );
         return null;
       }
