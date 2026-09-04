@@ -14,6 +14,7 @@ import {
   _setPromptTimers,
   _resetLogSizes,
   _resetLogMaxBytesCache,
+  _promptFileIdentityMatches,
 } from "../index.js";
 import pluginObj from "../index.js";
 
@@ -145,5 +146,48 @@ describe("TOCTOU vulnerability", () => {
 
     rmSync(testDir, { recursive: true, force: true });
     rmSync(outsideDir, { recursive: true, force: true });
+  });
+});
+
+describe("prompt file identity re-validation (TOCTOU decision matrix)", () => {
+  // Helper shape mirrors node:fs Stats fields that matter for the check.
+  const stats = (ino, dev) => ({ ino, dev });
+
+  it("accepts when the opened fd matches the pre-verified ino/dev", () => {
+    assert.equal(
+      _promptFileIdentityMatches(stats(123, 456), stats(123, 456), true),
+      true,
+    );
+  });
+
+  it("rejects when ino differs, even if the realpath fallback matches", () => {
+    // The swap-then-restore attack: a name-based re-check would pass, but the
+    // fd identity proves a different file was opened.
+    assert.equal(
+      _promptFileIdentityMatches(stats(999, 456), stats(123, 456), true),
+      false,
+    );
+  });
+
+  it("rejects when dev differs, even if the realpath fallback matches", () => {
+    assert.equal(
+      _promptFileIdentityMatches(stats(123, 777), stats(123, 456), true),
+      false,
+    );
+  });
+
+  it("falls back to the realpath re-check when ino/dev are 0 (Windows)", () => {
+    // On Windows Node reports ino=0/dev=0 for every file, so the identity
+    // comparison must be ignored and the name-based result must decide.
+    assert.equal(
+      _promptFileIdentityMatches(stats(0, 0), stats(0, 0), true),
+      true,
+      "fallback pass should be honored when identity is unreliable",
+    );
+    assert.equal(
+      _promptFileIdentityMatches(stats(0, 0), stats(0, 0), false),
+      false,
+      "fallback failure must reject (no-op identity must not silently allow)",
+    );
   });
 });
