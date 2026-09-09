@@ -411,7 +411,9 @@ function resolvePromptFile(
           );
         } else {
           log(`Found project-level prompt: ${projectPrompt}`);
-          return { path: realPromptPath, isProject: true };
+          // Return the original projectPrompt so that later fs.openSync with O_NOFOLLOW
+          // doesn't bypass symlink checks on intermediate components.
+          return { path: projectPrompt, isProject: true };
         }
       } catch (err) {
         // Ignore if realpath fails
@@ -592,13 +594,15 @@ const plugin = async (input, rawOptions) => {
     return cachedPaths;
   }
 
-  // Resolve and cache the prompt file path on first call. Uses the null→false
+  // Resolve and cache the prompt file path metadata on first call. Uses the null→false
   // sentinel so we don't re-resolve on subsequent hits when no custom prompt
   // file exists. Returns the cached result on subsequent calls.
   function resolveAndCachePromptFile(options, log) {
     if (cachedPromptFile !== null) return cachedPromptFile;
 
     // Resolve on first call; cache result (including null→false sentinel)
+    // We cache the metadata ({path, isProject}), not the final string content,
+    // to prevent TOCTOU on caching.
     cachedPromptFile = resolvePromptFile(
       options,
       cachedPaths.realProjectRoot,

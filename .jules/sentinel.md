@@ -64,3 +64,9 @@
 **Vulnerability:** A Time-of-Check to Time-of-Use (TOCTOU) vulnerability existed in `loadPromptFile`. Even with `O_NOFOLLOW` (which only checks the final path component) and a double `realpathSync` check, an attacker could rapidly restore the original directory structure after `openSync` but before the second `realpathSync`, allowing them to read an unintended file outside the project boundary.
 **Learning:** `realpathSync` string comparisons are insufficient for perfect TOCTOU prevention on intermediate directories because they rely on resolving names that can be swapped asynchronously.
 **Prevention:** Always capture the intended file's stats using `fs.statSync(currentRealPath)` and compare its exact `ino` (inode) and `dev` (device) numbers against the `fstatSync(fd)` of the opened file descriptor to guarantee the correct file was safely opened.
+
+## 2024-09-10 - [CRITICAL] Fix TOCTOU vulnerability when caching validated file paths
+
+**Vulnerability:** A Time-of-Check to Time-of-Use (TOCTOU) vulnerability existed in `resolvePromptFile`. By returning the resolved `realpathSync` target rather than the original user-supplied path, `O_NOFOLLOW` checks inside `loadPromptFile`'s `openSync` calls were effectively nullified since the symlink resolution happened upstream. This allowed attackers to swap intermediate directories with symlinks during the execution window.
+**Learning:** Returning a pre-resolved file path defeats `O_NOFOLLOW` protections for downstream file openings.
+**Prevention:** Always return and cache the unresolved, original path when performing file resolution intended for `O_NOFOLLOW` access controls, ensuring `openSync` operates on the original symlink boundaries.
