@@ -411,7 +411,7 @@ function resolvePromptFile(
           );
         } else {
           log(`Found project-level prompt: ${projectPrompt}`);
-          return { path: realPromptPath, isProject: true };
+          return { path: projectPrompt, isProject: true };
         }
       } catch (err) {
         // Ignore if realpath fails
