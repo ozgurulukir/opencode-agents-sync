@@ -56,11 +56,21 @@
 **Vulnerability:** The plugin config object (`rawOptions`) merges global trusted configurations and untrusted workspace configurations. The `options.promptFile` config was unconditionally mapped to `isProject: false`, meaning it bypassed all security boundaries and `O_NOFOLLOW` symlink checks meant for project files. A malicious repository could specify `promptFile: "/etc/passwd"` in its local config to achieve arbitrary file read via the agent context.
 **Learning:** Configuration objects that aggregate global and local settings cannot be assumed to be globally trusted simply based on the config key. Options controlling file paths must be strictly validated.
 **Prevention:** When accepting file paths from untrusted workspace configurations, default to treating them as project-bound (`isProject: true`) to enforce strict directory boundaries and symlink protections (`O_NOFOLLOW`). Only allow exceptions (e.g., `isProject: false`) if the path resolves explicitly to a trusted global configuration directory.
+
 ## 2025-02-28 - [Fix intermediate directory TOCTOU]
+
 **Vulnerability:** Symlink TOCTOU attacks could evade path boundary restrictions by swapping an intermediate directory. `O_NOFOLLOW` only protects the final component of a path.
 **Learning:** Checking `realpathSync(path)` then opening `path` with `O_NOFOLLOW` is not sufficient, as an attacker can swap an intermediate component of `path` to a symlink.
 **Prevention:** Resolve the real path (`currentRealPath = realpathSync(path)`), open the original `path` with `O_NOFOLLOW` to prevent the final component from being a symlink, and then re-verify `realpathSync(path) === currentRealPath` to detect intermediate swaps.
+
 ## 2024-09-02 - [Fix] TOCTOU Symlink Race Condition in loadPromptFile
+
 **Vulnerability:** A Time-of-Check to Time-of-Use (TOCTOU) vulnerability existed in `loadPromptFile`. Even with `O_NOFOLLOW` (which only checks the final path component) and a double `realpathSync` check, an attacker could rapidly restore the original directory structure after `openSync` but before the second `realpathSync`, allowing them to read an unintended file outside the project boundary.
 **Learning:** `realpathSync` string comparisons are insufficient for perfect TOCTOU prevention on intermediate directories because they rely on resolving names that can be swapped asynchronously.
 **Prevention:** Always capture the intended file's stats using `fs.statSync(currentRealPath)` and compare its exact `ino` (inode) and `dev` (device) numbers against the `fstatSync(fd)` of the opened file descriptor to guarantee the correct file was safely opened.
+
+## 2026-07-23 - [CRITICAL] Untrusted Workspace / TOCTOU vulnerability in `resolvePromptFile`
+
+**Vulnerability:** The `resolvePromptFile` function in `index.js` checked if a project-level prompt file (`.opencode/agents-sync-prompt.md`) resolved to a safe path within the project directory using `realpathSync`. However, it cached and returned the resolved path string (`realPromptPath`). When caching file paths for downstream operations that use `O_NOFOLLOW` (like `fs.openSync`), caching and passing the pre-resolved path bypasses the `O_NOFOLLOW` check on intermediate directory components, re-introducing TOCTOU (Time-of-Check to Time-of-Use) symlink vulnerabilities. An attacker could exploit this by replacing the `.md` file or its parent directory with a symlink to an arbitrary system file after the initial check but before a subsequent read.
+**Learning:** Returning a resolved path from `realpathSync` defeats the purpose of subsequent `O_NOFOLLOW` checks on intermediate directory components because `O_NOFOLLOW` only protects the final component. Caching resolved paths creates a window for TOCTOU symlink vulnerabilities on intermediate directories.
+**Prevention:** When caching file paths for downstream operations that use `O_NOFOLLOW`, always cache and pass the original, unresolved path rather than the `fs.realpathSync` result. This ensures `O_NOFOLLOW` correctly guards the final component of the path.
