@@ -411,7 +411,10 @@ function resolvePromptFile(
           );
         } else {
           log(`Found project-level prompt: ${projectPrompt}`);
-          return { path: realPromptPath, isProject: true };
+          // Security: Return the original path so loadPromptFile's openSync with
+          // O_NOFOLLOW and realpath re-validation guard the unresolved path against
+          // intermediate-directory symlink swaps (TOCTOU).
+          return { path: projectPrompt, isProject: true };
         }
       } catch (err) {
         // Ignore if realpath fails
